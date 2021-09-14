@@ -23,3 +23,12 @@
       (hassle/link (map #(str "Hello " %)))
       (hassle/sink :stdout)
       vector))
+
+(def ch-4 (cca/chan))
+(defn main4 []
+  (let [a (hassle/source :chan ch-4)
+        b (hassle/link a (take 2))
+        c (hassle/link b (map #(str "Hello " %)))
+        d (hassle/link a (map #(str "Goodbye " %)))
+        e (hassle/sink #{c d} :stdout)]
+    [e]))

@@ -31,7 +31,7 @@
 (defn async-head [ch] (cca/mult ch))
 (defn async-link [m xf] (cca/mult (cca/tap m (cca/chan 1 xf))))
 (defn async-join [ms] (cca/mult (cca/merge (map #(cca/tap % (cca/chan)) ms))))
-(defn async-tail [m] (cca/tap m (cca/chan (cca/dropping-buffer 0))))
+(defn async-drain [ms] (map #(cca/tap % (cca/chan (cca/dropping-buffer 0))) ms))
 
 ;; Test range
 (defn test-4 [ch]
@@ -42,40 +42,45 @@
         e (async-join [c d])
         f (async-link e (map inc))
         g (async-link f (map #(doto % println)))
-        h (async-tail g)]
+        h (async-drain [g])]
     ch))
 
 (defn test-3 [ch]
   (let [a (async-head ch)
         b (async-link a (map #(Integer/parseInt %)))
         c (async-link b (map #(doto % println)))
-        d (async-tail c)]
+        d (async-drain [c])]
     ch))
 
 (defn test-2 [ch]
   (let [a (async-head ch)
         b (async-link a (map #(doto % println)))
-        c (async-tail b)]
+        c (async-drain [b])]
     ch))
 
 (defn test-1 [ch]
   (let [a (async-head ch)
-        b (async-tail a)]
+        b (async-drain [a])]
     ch))
 
 (defn run [tst coll] (cca/onto-chan! (tst (cca/chan)) coll) nil)
 
 ;; Try 4. define a DAG data structure
 (defn source [& args] (concat [[] :source] args))
-(defn link [prev & args] (concat [[prev] :link] args))
-(defn sink [prev & args] (concat [[prev] :sink] args))
-(defn join [prevs] [prevs :join])
-(defn tail [prevs] [prevs :tail])
+(defn link [prev & args] (concat [(if (set? prev) prev #{prev}) :link] args))
+(defn sink [prev & args] (concat [(if (set? prev) prev #{prev}) :sink] args))
+(defn drain [prev] [prev :drain])
+
+(defn join-deps [deps]
+  (if (= (count deps) 1)
+    (first deps)
+    (async-join deps)))
 
 (defmulti asyncify :type)
 
 (defmethod asyncify :link
-  [{[dep] :deps [xf] :args}] (async-link dep xf))
+  [{deps :deps [xf] :args}]
+  (async-link (join-deps deps) xf))
 
 (defn drill-down [x]
   (-> x
@@ -98,16 +103,13 @@
          :env (into {} (System/getenv))}])))
 
 (defmethod asyncify [:sink :stdout]
-  [{[dep] :deps}]
-  (async-link dep (map #(doto % println))))
-
-(defmethod asyncify :join
   [{deps :deps}]
-  (async-join deps))
+  (async-link (join-deps deps)
+              (map #(doto % println))))
 
-(defmethod asyncify :tail
-  [{[dep] :deps}]
-  (async-tail dep))
+(defmethod asyncify :drain
+  [{deps :deps}]
+  (async-drain deps))
 
 (defn make-rdag
   ([node] (make-rdag {::root (hash node)} node))
@@ -162,7 +164,7 @@
 (def known-sink-keys #{:stdout})
 (defn engine [main]
   (-> (main)
-      tail
+      drain
       make-rdag
       lint-rdag
       asyncify-rdag))
