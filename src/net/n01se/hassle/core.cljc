@@ -161,9 +161,8 @@
 (def known-source-keys #{:chan :init})
 (def known-sink-keys #{:stdout})
 (defn engine [main]
-  (let [t (tail (main))]
-    (-> (main)
-        tail
-        make-rdag
-        lint-rdag
-        asyncify-rdag)))
+  (-> (main)
+      tail
+      make-rdag
+      lint-rdag
+      asyncify-rdag))
