@@ -32,3 +32,13 @@
         d (hassle/link a (map #(str "Goodbye " %)))
         e (hassle/sink #{c d} :stdout)]
     [e]))
+
+(def ch-5 (cca/chan))
+(defn main5 []
+  (let [a (hassle/source :chan ch-5)
+        b (hassle/link a (take 2))
+        c (hassle/link b (map #(str "Hello " %)))
+        d (hassle/link a (map #(str "Goodbye " %)))
+        e (hassle/link #{c d} (map #(str % "!")))
+        f (hassle/sink #{d e} :stdout)]
+    [f]))
