@@ -1,6 +1,7 @@
 (ns net.n01se.hassle.hw
   (:require [net.n01se.hassle.core :as hassle
-             :refer [engine
+             :refer [drain
+                     engine
                      link
                      sink
                      sink-handler
@@ -12,51 +13,51 @@
 (defmethod source-handler ::ch-1 [_]
    ch-1)
 
-(defn main1 []
+(def main1
   (-> (source ::ch-1)
       (link (map #(str "Hello " %)))
       (sink :stdout)
-      vector))
+      drain))
 
-(defn main2 []
+(def main2
   (-> (source :init)
       (link (map #(-> % :env (get "USER"))))
       (link (map #(str "Hello " %)))
       (sink :stdout)
-      vector))
+      drain))
 
 (def ch-3 (cca/chan))
 (defmethod source-handler ::ch-3 [_] ch-3)
 
-(defn main3 []
+(def main3
   (-> (source ::ch-3)
       (link (take 2))
       (link (map #(str "Hello " %)))
       (sink :stdout)
-      vector))
+      drain))
 
 (def ch-4 (cca/chan))
 (defmethod source-handler ::ch-4 [_] ch-4)
 
-(defn main4 []
+(def main4
   (let [a (source ::ch-4)
         b (link a (take 2))
         c (link b (map #(str "Hello " %)))
         d (link a (map #(str "Goodbye " %)))
         e (sink #{c d} :stdout)]
-    [e]))
+    (drain e)))
 
 (def ch-5 (cca/chan))
 (defmethod source-handler ::ch-5 [_] ch-5)
 
-(defn main5 []
+(def main5
   (let [a (source ::ch-5)
         b (link a (take 2))
         c (link b (map #(str "Hello " %)))
         d (link a (map #(str "Goodbye " %)))
         e (link #{c d} (map #(str % "!")))
         f (sink #{d e} :stdout)]
-    [f]))
+    (drain f)))
 
 (defmethod source-handler ::dir
   [[_ dir]]
@@ -66,7 +67,9 @@
   [_]
   (cca/chan 1 (map engine)))
 
-(defn ls []
+(def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
+
+(def ls
   (-> (source :init)
       (link
         (map (fn [{:keys [argv env]}]
@@ -78,8 +81,8 @@
       (link
         (map (fn [[long? dir]]
                (-> (source ::dir dir)
-                   (link (map #(str (if long? "-rw-r--r-- 1 jclaggett jclaggett " "") %)))
+                   (link (map #(str (if long? fake-long "") %)))
                    (sink :stdout)
-                   vector))))
+                   drain))))
       (sink ::engine)
-      vector))
+      drain))

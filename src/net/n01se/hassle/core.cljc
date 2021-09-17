@@ -3,10 +3,10 @@
             [clojure.core.async :as cca]
             [clojure.pprint :refer [pprint]]))
 
-(defn source [& args] (concat [[] :source] args))
-(defn link [prev & args] (concat [(if (set? prev) prev #{prev}) :link] args))
-(defn sink [prev & args] (concat [(if (set? prev) prev #{prev}) :sink] args))
-(defn drain [prev] [prev :drain])
+(defn source [& args] (concat [:source #{}] args))
+(defn link [& args] (cons :link args))
+(defn sink [& args] (cons :sink args))
+(defn drain [& args] (cons :drain args))
 
 (defn merge-deps [deps]
   (if (= (count deps) 1)
@@ -65,7 +65,7 @@
 
 (defn make-rdag
   ([node] (make-rdag {::root (hash node)} node))
-  ([rdag [prev-nodes node-type & args :as node]]
+  ([rdag [node-type prev-nodes & args :as node]]
    (if (contains? rdag (hash node))
      rdag
      (reduce (fn [rdag prev-node]
@@ -78,7 +78,9 @@
                                       :id (hash node)
                                       :type node-type
                                       :args args})
-             prev-nodes))))
+             (if (set? prev-nodes)
+               prev-nodes
+               #{prev-nodes})))))
 
 (defn postwalk-rdag [orig-rdag kids-fn update-fn]
   (letfn [(update-node [rdag node-key]
@@ -116,7 +118,6 @@
 (def known-sink-keys #{:stdout})
 (defn engine [main]
   (-> main
-      drain
       make-rdag
       lint-rdag
       asyncify-rdag))
