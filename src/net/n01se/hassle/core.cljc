@@ -91,12 +91,12 @@
     ch))
 
 (defmulti asyncify :type)
+(defmulti source-handler first)
+(defmulti sink-handler first)
 
-(defn drill-down [x]
-  (-> x
-      (update :type vector (-> x :args first))
-      (update :args rest)
-      asyncify))
+(defmethod asyncify :source
+  [{args :args :as x}]
+  (mult-node (source-handler args) x))
 
 (defmethod asyncify :link
   [{deps :deps [xf] :args :as x}]
@@ -104,25 +104,21 @@
       (connect-dep (cca/chan 1 xf))
       (mult-node x)))
 
-(defmethod asyncify :source [x]
-  (mult-node (drill-down x) x))
-(defmethod asyncify :sink [x]
-  (drill-down x))
+(defmethod asyncify :sink
+  [{deps :deps args :args}]
+  (-> (merge-deps deps)
+      (connect-dep (sink-handler args))))
+        
 
-(defmethod asyncify [:source :chan]
-  [{[ch] :args :as x}]
-  ch)
-
-(defmethod asyncify [:source :init]
+(defmethod source-handler :init
   [_]
   (cca/to-chan!
     [ {:argv ["sterrett"]
        :env (into {} (System/getenv))}]))
 
-(defmethod asyncify [:sink :stdout]
-  [{deps :deps}]
-  (-> (merge-deps deps)
-      (connect-dep (cca/chan 1 (map #(doto % println))))))
+(defmethod sink-handler :stdout
+  [_]
+  (cca/chan 1 (map #(doto % println))))
 
 (defmethod asyncify :drain
   [{deps :deps}]
