@@ -47,11 +47,12 @@
       (connect-dep (sink-handler args))))
         
 
+(def argv [])
+(def env (into {} (System/getenv)))
+
 (defmethod source-handler :init
   [_]
-  (cca/to-chan!
-    [ {:argv ["sterrett"]
-       :env (into {} (System/getenv))}]))
+  (cca/to-chan! [{:argv argv :env env}]))
 
 (defmethod sink-handler :stdout
   [_]
@@ -114,7 +115,7 @@
 (def known-source-keys #{:chan :init})
 (def known-sink-keys #{:stdout})
 (defn engine [main]
-  (-> (main)
+  (-> main
       drain
       make-rdag
       lint-rdag
