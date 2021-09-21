@@ -121,3 +121,17 @@
       make-rdag
       lint-rdag
       asyncify-rdag))
+
+(defmacro graph [& args]
+  (let [sources (mapcat (fn [[k v]] [k (vec (concat [:source #{}] v))])
+                        (first args))
+        body (drop-last (rest args))
+        sinks (map (fn [[k v]] (vec (concat [:sink v] k)))
+                   (last args))]
+    `(let [~@sources
+           ~@body]
+       ^{::graph [:drain #{~@sinks}]}
+       (fn [~(first args)]
+         (let [~@body]
+           ~(last args))))))
+  
