@@ -3,10 +3,10 @@
             [clojure.core.async :as cca]
             [clojure.pprint :refer [pprint]]))
 
-(defn source [& args] (concat [:source #{}] args))
+(defn input [& args] (concat [:input #{}] args))
 (defn link [& args] (cons :link args))
-(defn sink [& args] (cons :sink args))
-(defn drain [& args] (cons :drain args))
+(defn output [& args] (cons :output args))
+(defn outputs [& args] (cons :outputs args))
 
 (defn merge-deps [deps]
   (if (= (count deps) 1)
@@ -28,12 +28,12 @@
     ch))
 
 (defmulti asyncify :type)
-(defmulti source-handler first)
-(defmulti sink-handler first)
+(defmulti input-handler first)
+(defmulti output-handler first)
 
-(defmethod asyncify :source
+(defmethod asyncify :input
   [{args :args :as x}]
-  (mult-node (source-handler args) x))
+  (mult-node (input-handler args) x))
 
 (defmethod asyncify :link
   [{deps :deps [xf] :args :as x}]
@@ -41,24 +41,24 @@
       (connect-dep (cca/chan 1 xf))
       (mult-node x)))
 
-(defmethod asyncify :sink
+(defmethod asyncify :output
   [{deps :deps args :args}]
   (-> (merge-deps deps)
-      (connect-dep (sink-handler args))))
+      (connect-dep (output-handler args))))
         
 
 (def argv [])
 (def env (into {} (System/getenv)))
 
-(defmethod source-handler :init
+(defmethod input-handler :init
   [_]
   (cca/to-chan! [{:argv argv :env env}]))
 
-(defmethod sink-handler :stdout
+(defmethod output-handler :stdout
   [_]
   (cca/chan 1 (map #(doto % println))))
 
-(defmethod asyncify :drain
+(defmethod asyncify :outputs
   [{deps :deps}]
   (-> (merge-deps deps)
       (connect-dep (cca/chan (cca/dropping-buffer 0)))))
@@ -114,24 +114,18 @@
             node (assoc node :deps deps)]
         (assoc node :async (asyncify node))))))
 
-(def known-source-keys #{:chan :init})
-(def known-sink-keys #{:stdout})
 (defn engine [main]
   (-> main
       make-rdag
       lint-rdag
       asyncify-rdag))
 
-(defmacro graph [& args]
-  (let [sources (mapcat (fn [[k v]] [k (vec (concat [:source #{}] v))])
-                        (first args))
+(defmacro xnet [& args]
+  (let [inputs (first args)
+        typed-inputs (mapcat (fn [[k v]] [k (concat [`list :input #{}] v)]) inputs)
         body (drop-last (rest args))
-        sinks (map (fn [[k v]] (vec (concat [:sink v] k)))
-                   (last args))]
-    `(let [~@sources
-           ~@body]
-       ^{::graph [:drain #{~@sinks}]}
-       (fn [~(first args)]
-         (let [~@body]
-           ~(last args))))))
+        outputs (last args)
+        typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
+    `^{::xnet (let [~@typed-inputs ~@body] (list :outputs #{~@typed-outputs}))}
+    (fn [~inputs] (let [~@body] ~outputs))))
   
