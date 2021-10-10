@@ -88,13 +88,14 @@
                          trees
                          nil))
 
-  ([dag trees super-node-key]
+  ([net-map trees super-node-key]
    (reduce
-     (fn [dag [tree-type sub-trees args :as tree]]
+     (fn [net-map [tree-type sub-trees args :as tree]]
        (let [node-key (hash tree)]
-         (cond-> dag
-           (not (contains? dag node-key))
-           (assoc node-key {:args args
+         (cond-> net-map
+           (not (contains? net-map node-key))
+           (assoc node-key {:type tree-type
+                            :args args
                             :inputs #{}
                             :outputs #{super-node-key}})
 
@@ -112,7 +113,7 @@
            true
            (make-net-map sub-trees node-key))))
 
-     dag
+     net-map
      (if (set? trees) trees #{trees}))))
 
 (defn postwalk-rdag [orig-rdag kids-fn update-fn]
@@ -132,6 +133,25 @@
     (-> orig-rdag
         (vary-meta assoc ::visited #{})
         (visit-node (::root orig-rdag)))))
+
+(defn postwalk-net-map [orig-net-map kids-fn update-fn]
+  (letfn [(update-node [net-map node-key]
+            (update net-map node-key update-fn net-map))
+
+          (visit-node [net-map node-key]
+            (if (contains? (-> net-map meta ::visited) node-key)
+              net-map
+              (-> net-map
+                  (vary-meta update ::visited conj node-key)
+                  (visit-nodes (kids-fn (net-map node-key)))
+                  (update-node node-key))))
+
+          (visit-nodes [net-map node-keys]
+            (reduce visit-node net-map node-keys))]
+
+    (-> orig-net-map
+        (vary-meta assoc ::visited #{})
+        (visit-nodes (-> orig-net-map :outputs vals)))))
 
 (defn lint-rdag [rdag]
   rdag)

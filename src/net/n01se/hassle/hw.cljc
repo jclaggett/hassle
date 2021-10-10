@@ -131,3 +131,15 @@
                              (str (if long? fake-long "") file))))
     {[::dir-cmd] lnk-1
      [:stdout] lnk-2}))
+
+(def net1
+  (net {} {}))
+
+(def net2
+  (net {init :init}
+       {:stdout init}))
+
+(def net3
+  (net {init :init}
+       argv (link init (map :argv))
+       {:stdout argv}))
