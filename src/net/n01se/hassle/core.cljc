@@ -147,11 +147,18 @@
                   (update-node node-key))))
 
           (visit-nodes [net-map node-keys]
-            (reduce visit-node net-map node-keys))]
+            (reduce visit-node net-map node-keys))
+
+          (get-root-node-keys []
+            (let [roots-fn (case kids-fn
+                             :inputs :outputs
+                             :outputs :inputs
+                             :none)]
+              (-> orig-net-map roots-fn vals)))]
 
     (-> orig-net-map
         (vary-meta assoc ::visited #{})
-        (visit-nodes (-> orig-net-map :outputs vals)))))
+        (visit-nodes (get-root-node-keys)))))
 
 (defn lint-rdag [rdag]
   rdag)
