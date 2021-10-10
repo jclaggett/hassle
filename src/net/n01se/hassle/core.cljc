@@ -4,7 +4,7 @@
             [clojure.pprint :refer [pprint]]))
 
 (defn input [& args] (concat [:input #{}] args))
-(defn link [& args] (cons :link args))
+(defn node [& args] (cons :node args))
 (defn output [& args] (cons :output args))
 (defn outputs [& args] (set args))
 
@@ -35,7 +35,7 @@
   [{args :args :as x}]
   (mult-node (input-handler args) x))
 
-(defmethod asyncify :link
+(defmethod asyncify :node
   [{deps :deps [xf] :args :as x}]
   (-> (merge-deps deps)
       (connect-dep (cca/chan 1 xf))

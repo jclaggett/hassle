@@ -2,7 +2,7 @@
   (:require [net.n01se.hassle.core :as hassle
              :refer [outputs
                      engine
-                     link
+                     node
                      output
                      output-handler
                      input
@@ -16,14 +16,14 @@
 
 (def main1
   (-> (input ::ch-1)
-      (link (map #(str "Hello " %)))
+      (node (map #(str "Hello " %)))
       (output :stdout)
       outputs))
 
 (def main2
   (-> (input :init)
-      (link (map #(-> % :env (get "USER"))))
-      (link (map #(str "Hello " %)))
+      (node (map #(-> % :env (get "USER"))))
+      (node (map #(str "Hello " %)))
       (output :stdout)
       outputs))
 
@@ -32,8 +32,8 @@
 
 (def main3
   (-> (input ::ch-3)
-      (link (take 2))
-      (link (map #(str "Hello " %)))
+      (node (take 2))
+      (node (map #(str "Hello " %)))
       (output :stdout)
       outputs))
 
@@ -42,9 +42,9 @@
 
 (def main4
   (let [a (input ::ch-4)
-        b (link a (take 2))
-        c (link b (map #(str "Hello " %)))
-        d (link a (map #(str "Goodbye " %)))
+        b (node a (take 2))
+        c (node b (map #(str "Hello " %)))
+        d (node a (map #(str "Goodbye " %)))
         e (output #{c d} :stdout)]
     (outputs e)))
 
@@ -53,10 +53,10 @@
 
 (def main5
   (let [a (input ::ch-5)
-        b (link a (take 2))
-        c (link b (map #(str "Hello " %)))
-        d (link a (map #(str "Goodbye " %)))
-        e (link #{c d} (map #(str % "!")))
+        b (node a (take 2))
+        c (node b (map #(str "Hello " %)))
+        d (node a (map #(str "Goodbye " %)))
+        e (node #{c d} (map #(str % "!")))
         f (output #{d e} :stdout)]
     (outputs f)))
 
@@ -72,7 +72,7 @@
 
 (def ls
   (-> (input :init)
-      (link
+      (node
         (map (fn [{:keys [argv env]}]
                (clojure.pprint/pprint argv)
                (let [long? (= "-l" (get argv 0))
@@ -80,10 +80,10 @@
                               (if long? 1 0)
                               (get env "PWD" "."))]
                  [long? dir]))))
-      (link
+      (node
         (map (fn [[long? dir]]
                (-> (input ::dir dir)
-                   (link (map #(str (if long? fake-long "") %)))
+                   (node (map #(str (if long? fake-long "") %)))
                    (output :stdout)
                    outputs))))
       (output ::engine)
@@ -103,14 +103,14 @@
 (def ls2
   (let [src-1 (input :init)
         src-2 (input ::dir-cmd)
-        lnk-1 (link src-1
+        lnk-1 (node src-1
                    (map (fn [{:keys [argv env]}]
                           (let [long? (= "-l" (get argv 0))
                                 dir (get argv
                                          (if long? 1 0)
                                          (get env "PWD" "."))]
                             [long? dir]))))
-        lnk-2 (link src-2 (map (fn [[long? file]]
+        lnk-2 (node src-2 (map (fn [[long? file]]
                                  (str (if long? fake-long "") file))))
         snk-1 (output lnk-1 ::dir-cmd)
         snk-2 (output lnk-2 :stdout)]
@@ -120,14 +120,14 @@
   (net
     {src-1 [:init]
      src-2 [::dir-cmd]}
-    lnk-1 (link src-1
+    lnk-1 (node src-1
                 (map (fn [{:keys [argv env]}]
                        (let [long? (= "-l" (get argv 0))
                              dir (get argv
                                       (if long? 1 0)
                                       (get env "PWD" "."))]
                          [long? dir]))))
-    lnk-2 (link src-2 (map (fn [[long? file]]
+    lnk-2 (node src-2 (map (fn [[long? file]]
                              (str (if long? fake-long "") file))))
     {[::dir-cmd] lnk-1
      [:stdout] lnk-2}))
@@ -141,5 +141,5 @@
 
 (def net3
   (net {init :init}
-       argv (link init (map :argv))
+       argv (node init (map :argv))
        {:stdout argv}))
