@@ -7,7 +7,7 @@
                      output-handler
                      input
                      input-handler
-                     xnet]]
+                     net]]
             [clojure.core.async :as cca]))
 
 (def ch-1 (cca/chan))
@@ -114,10 +114,10 @@
                                  (str (if long? fake-long "") file))))
         snk-1 (output lnk-1 ::dir-cmd)
         snk-2 (output lnk-2 :stdout)]
-    (outputs #{snk-1 snk-2})))
+    #{snk-1 snk-2}))
 
 (def ls3
-  (xnet
+  (net
     {src-1 [:init]
      src-2 [::dir-cmd]}
     lnk-1 (link src-1

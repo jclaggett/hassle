@@ -6,7 +6,7 @@
 (defn input [& args] (concat [:input #{}] args))
 (defn link [& args] (cons :link args))
 (defn output [& args] (cons :output args))
-(defn outputs [& args] (cons :outputs args))
+(defn outputs [& args] (set args))
 
 (defn merge-deps [deps]
   (if (= (count deps) 1)
@@ -82,6 +82,39 @@
                prev-nodes
                #{prev-nodes})))))
 
+(defn make-net-map
+  ([trees] (make-net-map {:inputs {}
+                          :outputs {}}
+                         trees
+                         nil))
+
+  ([dag trees super-node-key]
+   (reduce
+     (fn [dag [tree-type sub-trees args :as tree]]
+       (let [node-key (hash tree)]
+         (cond-> dag
+           (not (contains? dag node-key))
+           (assoc node-key {:args args
+                            :inputs #{}
+                            :outputs #{super-node-key}})
+
+           (= tree-type :input)
+           (-> (assoc-in [:inputs args] node-key)
+               (update node-key dissoc :inputs))
+
+           (= tree-type :output)
+           (-> (assoc-in [:outputs args] node-key)
+               (update node-key dissoc :outputs))
+
+           (not (nil? super-node-key))
+           (update-in [super-node-key :inputs] conj node-key)
+
+           true
+           (make-net-map sub-trees node-key))))
+
+     dag
+     (if (set? trees) trees #{trees}))))
+
 (defn postwalk-rdag [orig-rdag kids-fn update-fn]
   (letfn [(update-node [rdag node-key]
             (update rdag node-key update-fn rdag))
@@ -120,12 +153,12 @@
       lint-rdag
       asyncify-rdag))
 
-(defmacro xnet [& args]
+(defmacro net [& args]
   (let [inputs (first args)
-        typed-inputs (mapcat (fn [[k v]] [k (concat [`list :input #{}] v)]) inputs)
+        typed-inputs (mapcat (fn [[k v]] [k (list `list :input #{} v)]) inputs)
         body (drop-last (rest args))
         outputs (last args)
         typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
-    `^{::xnet (let [~@typed-inputs ~@body] (list :outputs #{~@typed-outputs}))}
-    (fn [~inputs] (let [~@body] ~outputs))))
+    `^{::compose-net (fn [~inputs] (let [~@body] ~outputs))}
+    (let [~@typed-inputs ~@body] #{~@typed-outputs})))
   
