@@ -31,6 +31,15 @@
 (defmulti input-handler first)
 (defmulti output-handler first)
 
+(def argv [])
+(def env (into {} (System/getenv)))
+
+(defmulti io-chan identity)
+(defmethod io-chan :init [_]
+  (cca/to-chan! [{:argv argv :env env}]))
+(defmethod io-chan :stdout [_]
+  (cca/chan 1 (map #(doto % println))))
+
 (defmethod asyncify :input
   [{args :args :as x}]
   (mult-node (input-handler args) x))
@@ -46,9 +55,6 @@
   (-> (merge-deps deps)
       (connect-dep (output-handler args))))
         
-
-(def argv [])
-(def env (into {} (System/getenv)))
 
 (defmethod input-handler :init
   [_]
@@ -174,11 +180,53 @@
             node (assoc node :deps deps)]
         (assoc node :async (asyncify node))))))
 
+(defn get-io-chan [opposites args]
+  ;; Tempting to use get-in's default value but that would cause io-chan to
+  ;; always be called which is bad since it creates a channel.
+  (or (get-in opposites [args :async])
+      (io-chan args)))
+
+(defn asyncify-net-map [net-map]
+  (postwalk-net-map
+    net-map
+    :inputs
+    (fn [{:keys [type args inputs] :as node} net-map]
+      (let [input-asyncs (map (fn [input] (-> input net-map :async)) inputs)
+            async (case type
+                    :input
+                    (-> (get-io-chan (net-map :outputs) args)
+                        (mult-node node))
+
+                    :node
+                    (-> (merge-deps input-asyncs)
+                        (connect-dep (cca/chan 1 args))
+                        (mult-node node))
+
+                    :output
+                    (-> (merge-deps input-asyncs)
+                        (connect-dep (get-io-chan (net-map :inputs) args))))]
+        (assoc node :async async)))))
+
+(defn drain-net-map [net-map]
+  (let [pure-outputs (->> (:outputs net-map)
+                          (remove (fn [[k v]] (contains? (:inputs net-map) k)))
+                          (map last)
+                          (map net-map)
+                          (map :async))]
+    (-> (merge-deps pure-outputs)
+        (connect-dep (cca/chan (cca/dropping-buffer 0))))))
+
 (defn engine [main]
   (-> main
       make-rdag
       lint-rdag
       asyncify-rdag))
+
+(defn engine2 [main]
+  (-> main
+      make-net-map
+      asyncify-net-map
+      drain-net-map))
 
 (defmacro net [& args]
   (let [inputs (first args)

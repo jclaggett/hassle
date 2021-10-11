@@ -89,17 +89,16 @@
       (output ::engine)
       outputs))
 
-(def dir-cmd-chan
+#_(defmethod hassle/input-handler ::dir-cmd [_] dir-cmd-chan)
+#_(defmethod hassle/output-handler ::dir-cmd [_] dir-cmd-chan)
+
+(defmethod hassle/io-chan ::dir-cmd [_]
   (cca/chan
     1
     (mapcat
       (fn [[long? dir]]
         (for [file (file-seq (clojure.java.io/file dir))]
           [long? file])))))
-
-(defmethod hassle/input-handler ::dir-cmd [_] dir-cmd-chan)
-(defmethod hassle/output-handler ::dir-cmd [_] dir-cmd-chan)
-
 (def ls2
   (let [src-1 (input :init)
         src-2 (input ::dir-cmd)
@@ -118,8 +117,8 @@
 
 (def ls3
   (net
-    {src-1 [:init]
-     src-2 [::dir-cmd]}
+    {src-1 :init
+     src-2 ::dir-cmd}
     lnk-1 (node src-1
                 (map (fn [{:keys [argv env]}]
                        (let [long? (= "-l" (get argv 0))
@@ -129,8 +128,8 @@
                          [long? dir]))))
     lnk-2 (node src-2 (map (fn [[long? file]]
                              (str (if long? fake-long "") file))))
-    {[::dir-cmd] lnk-1
-     [:stdout] lnk-2}))
+    {::dir-cmd lnk-1
+     :stdout lnk-2}))
 
 (def net1
   (net {} {}))
