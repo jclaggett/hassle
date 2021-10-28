@@ -22,10 +22,33 @@
     (cca/tap dep ch)
     (cca/pipe dep ch)))
 
-(defn mult-node [ch node]
-  (if (> (count (:next node)) 1)
+(defn mult-node [ch nodes]
+  (if (> (count nodes) 1)
     (cca/mult ch)
     ch))
+
+(defn merge-ch [out-chs]
+  (condp = (count out-chs)
+    0 nil
+    1 (first out-chs)
+    (cca/merge
+      (for [out-ch out-chs]
+        (if (satisfies? cca/Mult out-ch)
+          (cca/tap out-ch (cca/chan))
+          out-ch)))))
+
+(defn connect-ch [in-ch ch]
+  (if (nil? in-ch)
+    ch
+    (if (satisfies? cca/Mult in-ch)
+      (cca/tap in-ch ch)
+      (cca/pipe in-ch ch))))
+
+(defn mult-ch [ch nodes]
+  (condp = (count nodes)
+    0 nil
+    1 ch
+    (cca/mult ch)))
 
 (defmulti asyncify :type)
 (defmulti input-handler first)
@@ -54,7 +77,6 @@
   [{deps :deps args :args}]
   (-> (merge-deps deps)
       (connect-dep (output-handler args))))
-        
 
 (defmethod input-handler :init
   [_]
@@ -103,7 +125,7 @@
            (assoc node-key {:type tree-type
                             :args args
                             :inputs #{}
-                            :outputs #{super-node-key}})
+                            :outputs #{}})
 
            (= tree-type :input)
            (-> (assoc-in [:inputs args] node-key)
@@ -114,7 +136,8 @@
                (update node-key dissoc :outputs))
 
            (not (nil? super-node-key))
-           (update-in [super-node-key :inputs] conj node-key)
+           (-> (update-in [node-key :outputs] conj super-node-key)
+               (update-in [super-node-key :inputs] conj node-key))
 
            true
            (make-net-map sub-trees node-key))))
@@ -180,41 +203,38 @@
             node (assoc node :deps deps)]
         (assoc node :async (asyncify node))))))
 
-(defn get-io-chan [opposites args]
+(defn get-io-chan [net-map opposites args]
   ;; Tempting to use get-in's default value but that would cause io-chan to
   ;; always be called which is bad since it creates a channel.
-  (or (get-in opposites [args :async])
+  (or (get-in net-map [(get (net-map opposites) args) :ch])
       (io-chan args)))
 
 (defn asyncify-net-map [net-map]
   (postwalk-net-map
     net-map
     :inputs
-    (fn [{:keys [type args inputs] :as node} net-map]
-      (let [input-asyncs (map (fn [input] (-> input net-map :async)) inputs)
-            async (case type
-                    :input
-                    (-> (get-io-chan (net-map :outputs) args)
-                        (mult-node node))
-
-                    :node
-                    (-> (merge-deps input-asyncs)
-                        (connect-dep (cca/chan 1 args))
-                        (mult-node node))
-
-                    :output
-                    (-> (merge-deps input-asyncs)
-                        (connect-dep (get-io-chan (net-map :inputs) args))))]
-        (assoc node :async async)))))
+    (fn [{:keys [args inputs outputs] :as node} net-map]
+      (let [in-ch (merge-ch (map (comp :out-ch net-map) inputs))
+            ch (connect-ch
+                 in-ch
+                 (condp = (:type node)
+                   :input (get-io-chan net-map :outputs args)
+                   :node (cca/chan 1 args)
+                   :output (get-io-chan net-map :inputs args)))
+            out-ch (mult-ch ch outputs)]
+        (assoc node
+               :in-ch in-ch
+               :ch ch
+               :out-ch out-ch)))))
 
 (defn drain-net-map [net-map]
   (let [pure-outputs (->> (:outputs net-map)
                           (remove (fn [[k v]] (contains? (:inputs net-map) k)))
-                          (map last)
-                          (map net-map)
-                          (map :async))]
-    (-> (merge-deps pure-outputs)
-        (connect-dep (cca/chan (cca/dropping-buffer 0))))))
+                          (#(do (println "Draining:" (map first %)) %))
+                          (map (comp :ch net-map last)))]
+    (-> (merge-ch pure-outputs)
+        (connect-ch (cca/chan (cca/dropping-buffer 0))))
+    net-map))
 
 (defn engine [main]
   (-> main
@@ -227,6 +247,12 @@
       make-net-map
       asyncify-net-map
       drain-net-map))
+
+(defn collect-io-chans [net-map]
+  (->> (merge (net-map :inputs)
+              (net-map :outputs))
+       (map (fn [[k v]] [k (get-in net-map [v :ch])]))
+       (into {})))
 
 (defmacro net [& args]
   (let [inputs (first args)
