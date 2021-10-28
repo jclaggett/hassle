@@ -8,25 +8,6 @@
 (defn output [& args] (cons :output args))
 (defn outputs [& args] (set args))
 
-(defn merge-deps [deps]
-  (if (= (count deps) 1)
-    (first deps)
-    (cca/merge
-      (for [dep deps]
-        (if (satisfies? cca/Mult dep)
-          (cca/tap dep (cca/chan))
-          dep)))))
-
-(defn connect-dep [dep ch]
-  (if (satisfies? cca/Mult dep)
-    (cca/tap dep ch)
-    (cca/pipe dep ch)))
-
-(defn mult-node [ch nodes]
-  (if (> (count nodes) 1)
-    (cca/mult ch)
-    ch))
-
 (defn merge-ch [out-chs]
   (condp = (count out-chs)
     0 nil
@@ -50,10 +31,6 @@
     1 ch
     (cca/mult ch)))
 
-(defmulti asyncify :type)
-(defmulti input-handler first)
-(defmulti output-handler first)
-
 (def argv [])
 (def env (into {} (System/getenv)))
 
@@ -62,53 +39,6 @@
   (cca/to-chan! [{:argv argv :env env}]))
 (defmethod io-chan :stdout [_]
   (cca/chan 1 (map #(doto % println))))
-
-(defmethod asyncify :input
-  [{args :args :as x}]
-  (mult-node (input-handler args) x))
-
-(defmethod asyncify :node
-  [{deps :deps [xf] :args :as x}]
-  (-> (merge-deps deps)
-      (connect-dep (cca/chan 1 xf))
-      (mult-node x)))
-
-(defmethod asyncify :output
-  [{deps :deps args :args}]
-  (-> (merge-deps deps)
-      (connect-dep (output-handler args))))
-
-(defmethod input-handler :init
-  [_]
-  (cca/to-chan! [{:argv argv :env env}]))
-
-(defmethod output-handler :stdout
-  [_]
-  (cca/chan 1 (map #(doto % println))))
-
-(defmethod asyncify :outputs
-  [{deps :deps}]
-  (-> (merge-deps deps)
-      (connect-dep (cca/chan (cca/dropping-buffer 0)))))
-
-(defn make-rdag
-  ([node] (make-rdag {::root (hash node)} node))
-  ([rdag [node-type prev-nodes & args :as node]]
-   (if (contains? rdag (hash node))
-     rdag
-     (reduce (fn [rdag prev-node]
-               (-> rdag
-                   (make-rdag prev-node)
-                   (update-in [(hash prev-node) :next] conj (hash node))
-                   (update-in [(hash node) :prev] conj (hash prev-node))))
-             (assoc rdag (hash node) {:prev #{}
-                                      :next #{}
-                                      :id (hash node)
-                                      :type node-type
-                                      :args args})
-             (if (set? prev-nodes)
-               prev-nodes
-               #{prev-nodes})))))
 
 (defn make-net-map
   ([trees] (make-net-map {:inputs {}
@@ -145,24 +75,6 @@
      net-map
      (if (set? trees) trees #{trees}))))
 
-(defn postwalk-rdag [orig-rdag kids-fn update-fn]
-  (letfn [(update-node [rdag node-key]
-            (update rdag node-key update-fn rdag))
-
-          (visit-kids [rdag node-key]
-            (reduce visit-node rdag (kids-fn (rdag node-key))))
-
-          (visit-node [rdag node-key]
-            (if (contains? (-> rdag meta ::visited) node-key)
-              rdag
-              (-> rdag
-                  (vary-meta update ::visited conj node-key)
-                  (visit-kids node-key)
-                  (update-node node-key))))]
-    (-> orig-rdag
-        (vary-meta assoc ::visited #{})
-        (visit-node (::root orig-rdag)))))
-
 (defn postwalk-net-map [orig-net-map kids-fn update-fn]
   (letfn [(update-node [net-map node-key]
             (update net-map node-key update-fn net-map))
@@ -188,20 +100,6 @@
     (-> orig-net-map
         (vary-meta assoc ::visited #{})
         (visit-nodes (get-root-node-keys)))))
-
-(defn lint-rdag [rdag]
-  rdag)
-
-(defn asyncify-rdag [rdag]
-  (postwalk-rdag
-    rdag
-    :prev
-    (fn [node rdag]
-      (let [deps (->> (:prev node)
-                      (map rdag)
-                      (map :async))
-            node (assoc node :deps deps)]
-        (assoc node :async (asyncify node))))))
 
 (defn get-io-chan [net-map opposites args]
   ;; Tempting to use get-in's default value but that would cause io-chan to
@@ -237,12 +135,6 @@
     net-map))
 
 (defn engine [main]
-  (-> main
-      make-rdag
-      lint-rdag
-      asyncify-rdag))
-
-(defn engine2 [main]
   (-> main
       make-net-map
       asyncify-net-map
