@@ -1,6 +1,5 @@
 (ns net.n01se.hassle.core
-  (:require [lazy-map.core :as lm]
-            [clojure.core.async :as cca]
+  (:require [clojure.core.async :as cca]
             [clojure.pprint :refer [pprint]]))
 
 (defn input [& args] (concat [:input #{}] args))
