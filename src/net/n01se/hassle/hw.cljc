@@ -1,6 +1,6 @@
 (ns net.n01se.hassle.hw
   (:require [net.n01se.hassle.core :as hassle
-             :refer [engine node net]]
+             :refer [start node net]]
             [clojure.core.async :as cca]
             [clojure.pprint :refer [pprint]]))
 

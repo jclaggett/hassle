@@ -133,9 +133,8 @@
         (connect-ch (cca/chan (cca/dropping-buffer 0))))
     net-map))
 
-(defn engine [main]
-  (-> main
-      make-net-map
+(defn start [net-map]
+  (-> net-map
       asyncify-net-map
       drain-net-map))
 
@@ -152,5 +151,5 @@
         outputs (last args)
         typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
     `^{::compose-net (fn [~inputs] (let [~@body] ~outputs))}
-    (let [~@typed-inputs ~@body] #{~@typed-outputs})))
+    (let [~@typed-inputs ~@body] (make-net-map #{~@typed-outputs}))))
   
