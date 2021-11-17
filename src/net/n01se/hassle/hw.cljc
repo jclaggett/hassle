@@ -65,30 +65,31 @@
 
 (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
 
+(def dir-cmd-xf
+  (mapcat
+    (fn [[long? dir]]
+      (println "dir:" dir)
+      (for [file (file-seq (clojure.java.io/file dir))]
+        (do
+          (println "file: " file)
+          [long? file])))))
+
 (defmethod hassle/io-chan ::dir-cmd [_]
-  (cca/chan
-    1
-    (mapcat
-      (fn [[long? dir]]
-        (println "dir:" dir)
-        (for [file (file-seq (clojure.java.io/file dir))]
-          (do
-            (println "file: " file)
-            [long? file]))))))
+  (cca/chan 1 dir-cmd-xf))
 
 (def ls
   (net
-    {src-1 :init
-     src-2 ::dir-cmd}
-    nod-1 (node src-1
-                (map (fn [{:keys [argv env]}]
-                       (let [long? (= "-l" (get argv 0))
-                             dir (get argv
-                                      (if long? 1 0)
-                                      (get env "PWD" "."))]
-                         [long? dir]))))
-    nod-2 (node src-2 (map (fn [[long? file]]
-                             (str (if long? fake-long "") file))))
-    {::dir-cmd nod-1
-     :stdout nod-2}))
+    {init :init
+     dir-cmd ::dir-cmd}
+    opts (node init
+               (map (fn [{:keys [argv env]}]
+                      (let [long? (= "-l" (get argv 0))
+                            dir (get argv
+                                     (if long? 1 0)
+                                     (get env "PWD" "."))]
+                        [long? dir]))))
+    files (node dir-cmd (map (fn [[long? file]]
+                               (str (if long? fake-long "") file))))
+    {::dir-cmd opts
+     :stdout files}))
 

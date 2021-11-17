@@ -1,6 +1,7 @@
 (ns net.n01se.hassle.core
   (:require [clojure.core.async :as cca]
-            [clojure.pprint :refer [pprint]]))
+            [clojure.pprint :refer [pprint]]
+            [net.cgrand.xforms :as x]))
 
 (defn input [& args] (concat [:input #{}] args))
 (defn node [& args] (cons :node args))
@@ -32,10 +33,13 @@
 
 (def argv [])
 (def env (into {} (System/getenv)))
+(def init-map {:argv argv
+               :env env})
+(def init-variant [:init init-map])
 
 (defmulti io-chan identity)
 (defmethod io-chan :init [_]
-  (cca/to-chan! [{:argv argv :env env}]))
+  (cca/to-chan! [init-map]))
 (defmethod io-chan :stdout [_]
   (cca/chan 1 (map #(doto % println))))
 
@@ -124,10 +128,41 @@
                :ch ch
                :out-ch out-ch)))))
 
+(def init identity)
+
+(defn multiplex
+  [xfs]
+  (if (= 1 (count xfs))
+    (first xfs)
+    (x/multiplex xfs)))
+
+(defn get-root-nodes [net-map root]
+  (->> (net-map root)
+       vals
+       (map net-map)))
+
+(defn transduce-net-map [net-map]
+  (-> net-map
+      (postwalk-net-map
+        :outputs
+        (fn [{:keys [args inputs outputs] :as node} net-map]
+          (let [xf (multiplex (map net-map outputs))]
+            (condp = (:type node)
+              :input (comp (filter #(= args (first %)))
+                           (map last)
+                           xf)
+              :node (comp (init args) xf)
+              :output (map #(vector args %))))))
+      (get-root-nodes :inputs)
+      multiplex))
+
+(defn run-xf [net-map inputs]
+  (into [] (transduce-net-map net-map) inputs))
+
 (defn drain-net-map [net-map]
   (let [pure-outputs (->> (:outputs net-map)
                           (remove (fn [[k v]] (contains? (:inputs net-map) k)))
-                          (#(do (println "Draining:" (map first %)) %))
+                          #_(#(do (println "Draining:" (map first %)) %))
                           (map (comp :ch net-map last)))]
     (-> (merge-ch pure-outputs)
         (connect-ch (cca/chan (cca/dropping-buffer 0))))
