@@ -63,6 +63,22 @@
        e (node #{c d} (map #(str % "!")))
        {:stdout #{d e}}))
 
+(def ex11
+  (net {a ::ch1
+        b ::ch2}
+       c (node #{a b} (take 2))
+       {:stdout c}))
+
+(def ex12
+  (net {c1 ::ch1
+        c2 ::ch2}
+       n1 (node c1 (map #(str "n1-" %)))
+       n2 (node c2 (map #(str "n2-" %)))
+       n3 (node c1 (map #(str "n3-" %)))
+       n4 (node #{n1 n2} (take 2))
+       {:stdout #{n3 n4}}))
+
+
 (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
 
 (def dir-cmd-xf

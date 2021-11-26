@@ -128,7 +128,40 @@
                :ch ch
                :out-ch out-ch)))))
 
-(def init identity)
+(defn demultiplex #_constructor [inputs xf]
+  (if (= 1 (count inputs))
+    xf
+    (let [label "debug"
+          *transducer-calls (volatile! 0) ; reference counter
+          *init-calls (volatile! 0) ; reference counter
+          *shared-rf (volatile! nil)]
+      (println label "constructor called")
+      (fn transducer [rf]
+        (println label "transducer called" (inc @*transducer-calls) "times")
+        (if (= 1 (vswap! *transducer-calls inc))
+          (do
+            (println "Called First time! So transducing xf")
+            (vreset! *shared-rf
+                     (let [rf2 (xf rf)]
+                       (fn reducer
+                         (#_init []
+                          (if (= 1 (vswap! *init-calls inc))
+                            (do (println label "reducer (init)")
+                                (rf2))
+                            (do (println label "reducer NOT (init)"))))
+                         (#_step [r v]
+                          (println label "reducer (step" r v ")")
+                          (rf2 r v))
+                         (#_fini [r]
+                          (if (= 0 (vswap! *transducer-calls dec))
+                            (do (println label "reducer (fini" r ")")
+                                (rf2 r))
+                            (do (println label "reducer NOT fini")
+                                r)))))))
+          (do
+            #_(assert (= rf *first-rf) "Are you trying to call this primed transducer in multiple different runs?")
+            (println "Sharing" @*shared-rf)
+            @*shared-rf))))))
 
 (defn multiplex
   [xfs]
@@ -136,28 +169,72 @@
     (first xfs)
     (x/multiplex xfs)))
 
+(defn map-vals [f coll]
+  (->> coll
+       (map (fn [[k v]] [k (f v)]))
+       (into {})))
+
+(defn switch-alt [xf-map]
+  (multiplex
+    (map (fn [[k xf]]
+           (comp (filter #(= k (first %)))
+                 (take-while #(= (count %) 2))
+                 (map second)
+                 xf))
+         xf-map)))
+
+(defn switch [xf-map]
+    (fn transducer [rf]
+      (let [rf-map (map-vals (fn [xf]
+                               ((comp (take-while #(= (count %) 2))
+                                      (map second)
+                                      xf)
+                                rf))
+                           xf-map)
+            *rf-map (volatile! rf-map)]
+        (println "*rf-map" @*rf-map)
+        (fn reducer
+          (#_init [] (rf))
+          (#_step [a [k :as v]]
+           (let [rf (@*rf-map k (fn noop [a v] a))
+                 a' (rf a v)]
+             (if (reduced? a')
+               (let [a'' (rf @a')]
+                 (if (empty? (vswap! *rf-map dissoc k))
+                   (reduced a'')
+                   a''))
+               a'))) ;; switch reduced when a' is reduced
+          (#_fini [a]
+           (println "finishing switch: *rf-map" @*rf-map)
+           (reduce (fn [a [k rf]]
+                     (println "finishing switch branch:" k)
+                     (rf a))
+                   a
+                   @*rf-map))))))
+
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
-       vals
-       (map net-map)))
+       (map (fn [[k v]] [k (net-map v)]))
+       (into {})))
 
 (defn transduce-net-map [net-map]
   (-> net-map
       (postwalk-net-map
         :outputs
         (fn [{:keys [args inputs outputs] :as node} net-map]
-          (let [xf (multiplex (map net-map outputs))]
+          (let [output-xfs (map net-map outputs)]
             (condp = (:type node)
-              :input (comp (filter #(= args (first %)))
-                           (map last)
-                           xf)
-              :node (comp (init args) xf)
-              :output (map #(vector args %))))))
+              :input (multiplex output-xfs)
+              :node (comp (demultiplex inputs args)
+                          (multiplex output-xfs))
+              :output (demultiplex inputs (map (fn [x] [args x])))))))
       (get-root-nodes :inputs)
-      multiplex))
+      switch-alt))
 
 (defn run-xf [net-map inputs]
-  (into [] (transduce-net-map net-map) inputs))
+  (-> net-map
+      transduce-net-map
+      (sequence inputs)))
 
 (defn drain-net-map [net-map]
   (let [pure-outputs (->> (:outputs net-map)
