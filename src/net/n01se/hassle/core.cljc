@@ -128,40 +128,37 @@
                :ch ch
                :out-ch out-ch)))))
 
-(defn demultiplex #_constructor [inputs xf]
-  (if (= 1 (count inputs))
-    xf
-    (let [label "debug"
-          *transducer-calls (volatile! 0) ; reference counter
-          *init-calls (volatile! 0) ; reference counter
-          *shared-rf (volatile! nil)]
-      (println label "constructor called")
-      (fn transducer [rf]
-        (println label "transducer called" (inc @*transducer-calls) "times")
-        (if (= 1 (vswap! *transducer-calls inc))
-          (do
-            (println "Called First time! So transducing xf")
-            (vreset! *shared-rf
-                     (let [rf2 (xf rf)]
-                       (fn reducer
-                         (#_init []
-                          (if (= 1 (vswap! *init-calls inc))
-                            (do (println label "reducer (init)")
-                                (rf2))
-                            (do (println label "reducer NOT (init)"))))
-                         (#_step [r v]
-                          (println label "reducer (step" r v ")")
-                          (rf2 r v))
-                         (#_fini [r]
-                          (if (= 0 (vswap! *transducer-calls dec))
-                            (do (println label "reducer (fini" r ")")
-                                (rf2 r))
-                            (do (println label "reducer NOT fini")
-                                r)))))))
-          (do
-            #_(assert (= rf *first-rf) "Are you trying to call this primed transducer in multiple different runs?")
-            (println "Sharing" @*shared-rf)
-            @*shared-rf))))))
+(defn debug [msg x] (println "DEBUG:" msg) x)
+
+(defn demultiplex #_constructor
+  ([inputs xf] (if (= 1 (count inputs)) xf (demultiplex xf)))
+  ([xf]
+   (let [*ref-count (volatile! 0)
+         *cache (volatile! {})]
+     (fn transducer [rf]
+       (if (< 1 (vswap! *ref-count inc))
+         (:rf @*cache)
+         (let [rf' (xf rf)
+               rf'' (fn
+                      (#_init []
+                       (if (contains? @*cache :init)
+                         (:init @*cache)
+                         (:init (vswap! *cache assoc :init (rf')))))
+                      (#_step [a v]
+                       (if (contains? @*cache :reduced)
+                         (@*cache :reduced)
+                         (let [a' (rf' a v)]
+                           (if (reduced? a')
+                             (:reduced (vswap! *cache assoc :reduced a'))
+                             a'))))
+                      (#_fini [a]
+                       (if (contains? @*cache :fini)
+                         (:fini @*cache)
+                         (if (or (> 1 (vswap! *ref-count dec))
+                                 (contains? @*cache :reduced))
+                           (:fini (vswap! *cache assoc :fini (rf' a)))
+                           a))))]
+           (:rf (vswap! *cache assoc :rf rf''))))))))
 
 (defn multiplex
   [xfs]
@@ -192,23 +189,18 @@
                                 rf))
                            xf-map)
             *rf-map (volatile! rf-map)]
-        (println "*rf-map" @*rf-map)
         (fn reducer
           (#_init [] (rf))
           (#_step [a [k :as v]]
            (let [rf (@*rf-map k (fn noop [a v] a))
                  a' (rf a v)]
              (if (reduced? a')
-               (let [a'' (rf @a')]
-                 (if (empty? (vswap! *rf-map dissoc k))
-                   (reduced a'')
-                   a''))
-               a'))) ;; switch reduced when a' is reduced
+               (if (not (empty? (vswap! *rf-map dissoc k)))
+                 @a'
+                 a')
+               a')))
           (#_fini [a]
-           (println "finishing switch: *rf-map" @*rf-map)
-           (reduce (fn [a [k rf]]
-                     (println "finishing switch branch:" k)
-                     (rf a))
+           (reduce (fn [a [k rf]] (rf a))
                    a
                    @*rf-map))))))
 
@@ -229,7 +221,7 @@
                           (multiplex output-xfs))
               :output (demultiplex inputs (map (fn [x] [args x])))))))
       (get-root-nodes :inputs)
-      switch-alt))
+      switch))
 
 (defn run-xf [net-map inputs]
   (-> net-map
