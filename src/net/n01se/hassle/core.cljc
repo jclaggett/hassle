@@ -209,6 +209,13 @@
        (map (fn [[k v]] [k (net-map v)]))
        (into {})))
 
+(defn output-xf [k]
+  (fn transducer [rf]
+    (fn reducer
+      (#_init [] (rf))
+      (#_step [a v] (rf a [k v]))
+      (#_fini [a] (rf (unreduced (rf a [k])))))))
+  
 (defn transduce-net-map [net-map]
   (-> net-map
       (postwalk-net-map
@@ -219,7 +226,7 @@
               :input (multiplex output-xfs)
               :node (comp (demultiplex inputs args)
                           (multiplex output-xfs))
-              :output (demultiplex inputs (map (fn [x] [args x])))))))
+              :output (demultiplex inputs (output-xf args))))))
       (get-root-nodes :inputs)
       switch))
 
