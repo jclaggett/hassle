@@ -1,10 +1,10 @@
 (ns net.n01se.hassle.hw
-  (:require [net.n01se.hassle.core :as hassle
+  (:require [net.n01se.hassle.core :as h
              :refer [start node net]]
             [clojure.core.async :as cca]
             [clojure.pprint :refer [pprint]]))
 
-(defmethod hassle/io-chan ::ch [_] (cca/chan))
+(defmethod h/io-chan ::ch [_] (cca/chan))
 
 (def ex1
   (net {} {}))
@@ -90,7 +90,7 @@
           (println "file: " file)
           [long? file])))))
 
-(defmethod hassle/io-chan ::dir-cmd [_]
+(defmethod h/io-chan ::dir-cmd [_]
   (cca/chan 1 dir-cmd-xf))
 
 (def ls

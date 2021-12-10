@@ -171,7 +171,16 @@
        (map (fn [[k v]] [k (f v)]))
        (into {})))
 
-(defn switch-alt [xf-map]
+(defn variants
+  ([k]
+   (fn transducer [rf]
+     (fn reducer
+       (#_init [] (rf))
+       (#_step [a v] (rf a [k v]))
+       (#_fini [a] (rf (unreduced (rf a [k])))))))
+  ([k xs] (sequence (variants k) xs)))
+
+(defn match-variants-alt [xf-map]
   (multiplex
     (map (fn [[k xf]]
            (comp (filter #(= k (first %)))
@@ -180,42 +189,38 @@
                  xf))
          xf-map)))
 
-(defn switch [xf-map]
-    (fn transducer [rf]
-      (let [rf-map (map-vals (fn [xf]
-                               ((comp (take-while #(= (count %) 2))
-                                      (map second)
-                                      xf)
-                                rf))
-                           xf-map)
-            *rf-map (volatile! rf-map)]
-        (fn reducer
-          (#_init [] (rf))
-          (#_step [a [k :as v]]
-           (let [rf (@*rf-map k (fn noop [a v] a))
-                 a' (rf a v)]
-             (if (reduced? a')
-               (if (not (empty? (vswap! *rf-map dissoc k)))
-                 @a'
-                 a')
-               a')))
-          (#_fini [a]
-           (reduce (fn [a [k rf]] (rf a))
-                   a
-                   @*rf-map))))))
+(defn match-variants
+  ([xf-map]
+   (fn transducer [rf]
+     (let [rf-map (map-vals (fn [xf]
+                              ((comp (take-while #(= (count %) 2))
+                                     (map second)
+                                     xf)
+                               rf))
+                            xf-map)
+           *rf-map (volatile! rf-map)]
+       (fn reducer
+         (#_init [] (rf))
+         (#_step [a [k :as v]]
+          (let [rf (@*rf-map k (fn noop [a v] a))
+                a' (rf a v)]
+            (if (reduced? a')
+              (if (not (empty? (vswap! *rf-map dissoc k)))
+                (unreduced (rf @a')) ;; finish this branch
+                a')
+              a')))
+         (#_fini [a]
+          (reduce (fn [a [k rf]] (rf a))
+                  a
+                  @*rf-map))))))
+  ([xf-map xs]
+   (sequence (match-variants xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
        (map (fn [[k v]] [k (net-map v)]))
        (into {})))
 
-(defn output-xf [k]
-  (fn transducer [rf]
-    (fn reducer
-      (#_init [] (rf))
-      (#_step [a v] (rf a [k v]))
-      (#_fini [a] (rf (unreduced (rf a [k])))))))
-  
 (defn transduce-net-map [net-map]
   (-> net-map
       (postwalk-net-map
@@ -226,9 +231,9 @@
               :input (multiplex output-xfs)
               :node (comp (demultiplex inputs args)
                           (multiplex output-xfs))
-              :output (demultiplex inputs (output-xf args))))))
+              :output (demultiplex inputs (variants args))))))
       (get-root-nodes :inputs)
-      switch))
+      match-variants))
 
 (defn run-xf [net-map inputs]
   (-> net-map
