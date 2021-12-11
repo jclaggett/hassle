@@ -202,12 +202,15 @@
        (fn reducer
          (#_init [] (rf))
          (#_step [a [k :as v]]
-          (let [rf (@*rf-map k (fn noop [a v] a))
+          (let [rf (get @*rf-map k (fn no-op [a v] a))
                 a' (rf a v)]
             (if (reduced? a')
-              (if (not (empty? (vswap! *rf-map dissoc k)))
-                (unreduced (rf @a')) ;; finish this branch
-                a')
+              ;; dissoc and finish this entry
+              (let [rf-map (vswap! *rf-map dissoc k)
+                    a'' (rf (unreduced a'))]
+                (if (empty? rf-map)
+                  (reduced a'')
+                  (unreduced a'')))
               a')))
          (#_fini [a]
           (reduce (fn [a [k rf]] (rf a))
