@@ -74,8 +74,8 @@
         c2 ::ch2}
        n1 (node c1 (map #(str "n1-" %)))
        n2 (node c2 (map #(str "n2-" %)))
-       n3 (node c1 (map #(str "n3-" %)))
-       n4 (node #{n1 n2} (take 2))
+       n3 (node n1 (map #(str "n3-" %)))
+       n4 (node #{n1 n2} (comp (map #(str "n4-" %)) (take 2)))
        {:stdout #{n3 n4}}))
 
 

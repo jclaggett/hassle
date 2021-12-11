@@ -3,6 +3,8 @@
             [clojure.pprint :refer [pprint]]
             [net.cgrand.xforms :as x]))
 
+(defn debug [msg x] (println "DEBUG:" msg) x)
+
 (defn input [& args] (concat [:input #{}] args))
 (defn node [& args] (cons :node args))
 (defn output [& args] (cons :output args))
@@ -128,7 +130,21 @@
                :ch ch
                :out-ch out-ch)))))
 
-(defn debug [msg x] (println "DEBUG:" msg) x)
+;; Transducer specific code
+(defmacro reducer
+  [[init & init-body]
+   [step & step-body]
+   [fini & fini-body]]
+  (assert (= init 'init) (str "Expected init but got: " init))
+  (assert (= step 'step) (str "Expected step but got: " step))
+  (assert (= fini 'fini) (str "Expected fini but got: " fini))
+  `(fn ~'reducer
+     ~init-body
+     ~step-body
+     ~fini-body))
+(defmacro init [rf] `(~rf))
+(defmacro step [rf a v] `(~rf ~a ~v))
+(defmacro fini [rf a] `(~rf ~a))
 
 (defn demultiplex #_constructor
   ([inputs xf] (if (= 1 (count inputs)) xf (demultiplex xf)))
@@ -139,24 +155,24 @@
        (if (< 1 (vswap! *ref-count inc))
          (:rf @*cache)
          (let [rf' (xf rf)
-               rf'' (fn
-                      (#_init []
+               rf'' (reducer
+                      (init []
                        (if (contains? @*cache :init)
                          (:init @*cache)
-                         (:init (vswap! *cache assoc :init (rf')))))
-                      (#_step [a v]
+                         (:init (vswap! *cache assoc :init (init rf')))))
+                      (step [a v]
                        (if (contains? @*cache :reduced)
                          (@*cache :reduced)
-                         (let [a' (rf' a v)]
+                         (let [a' (step rf' a v)]
                            (if (reduced? a')
                              (:reduced (vswap! *cache assoc :reduced a'))
                              a'))))
-                      (#_fini [a]
+                      (fini [a]
                        (if (contains? @*cache :fini)
                          (:fini @*cache)
                          (if (or (> 1 (vswap! *ref-count dec))
                                  (contains? @*cache :reduced))
-                           (:fini (vswap! *cache assoc :fini (rf' a)))
+                           (:fini (vswap! *cache assoc :fini (fini rf' a)))
                            a))))]
            (:rf (vswap! *cache assoc :rf rf''))))))))
 
@@ -174,10 +190,10 @@
 (defn variants
   ([k]
    (fn transducer [rf]
-     (fn reducer
-       (#_init [] (rf))
-       (#_step [a v] (rf a [k v]))
-       (#_fini [a] (rf (unreduced (rf a [k])))))))
+     (reducer
+       (init [] (init rf))
+       (step [a v] (step rf a [k v]))
+       (fini [a] (fini rf (unreduced (step rf a [k])))))))
   ([k xs] (sequence (variants k) xs)))
 
 (defn match-variants-alt [xf-map]
@@ -199,21 +215,21 @@
                                rf))
                             xf-map)
            *rf-map (volatile! rf-map)]
-       (fn reducer
-         (#_init [] (rf))
-         (#_step [a [k :as v]]
-          (let [rf (get @*rf-map k (fn no-op [a v] a))
-                a' (rf a v)]
+       (reducer
+         (init [] (init rf))
+         (step [a [k :as v]]
+          (let [rf (get @*rf-map k (fn no-op-step [a v] a))
+                a' (step rf a v)]
             (if (reduced? a')
               ;; dissoc and finish this entry
               (let [rf-map (vswap! *rf-map dissoc k)
-                    a'' (rf (unreduced a'))]
+                    a'' (fini rf (unreduced a'))]
                 (if (empty? rf-map)
                   (reduced a'')
                   (unreduced a'')))
               a')))
-         (#_fini [a]
-          (reduce (fn [a [k rf]] (rf a))
+         (fini [a]
+          (reduce (fn [a [_ rf]] (fini rf a))
                   a
                   @*rf-map))))))
   ([xf-map xs]
