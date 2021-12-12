@@ -70,6 +70,11 @@
        {:stdout c}))
 
 (def ex12
+  (net {a ::ch1}
+       b (node a identity)
+       {:stdout #{a b}}))
+
+(def ex13
   (net {c1 ::ch1
         c2 ::ch2}
        n1 (node c1 (map #(str "n1-" %)))

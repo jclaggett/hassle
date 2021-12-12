@@ -146,6 +146,34 @@
 (defmacro step [rf a v] `(~rf ~a ~v))
 (defmacro fini [rf a] `(~rf ~a))
 
+(defn multiplex #_constructor
+  [xfs]
+  (if (= 1 (count xfs))
+    (first xfs)
+    (fn transducer [rf]
+      (let [rf-map (->> xfs
+                        (map-indexed (fn [i xf] [i (xf rf)]))
+                        (into {}))
+            *rf-map (volatile! rf-map)]
+        (reducer
+          (init [] (init rf))
+          (step [a v]
+                (reduce
+                  (fn [a [k rf]]
+                    (let [a' (step rf a v)]
+                      (if (reduced? a')
+                        (let [a'' (fini rf (unreduced a'))]
+                          (if (empty? (vswap! *rf-map dissoc k))
+                            (reduced a'')
+                            (unreduced a'')))
+                        a')))
+                  a
+                  @*rf-map))
+          (fini [a]
+                (reduce (fn [a [_ rf]] (fini rf a))
+                        a
+                        @*rf-map)))))))
+
 (defn demultiplex #_constructor
   ([inputs xf] (if (= 1 (count inputs)) xf (demultiplex xf)))
   ([xf]
@@ -175,12 +203,6 @@
                            (:fini (vswap! *cache assoc :fini (fini rf' a)))
                            a))))]
            (:rf (vswap! *cache assoc :rf rf''))))))))
-
-(defn multiplex
-  [xfs]
-  (if (= 1 (count xfs))
-    (first xfs)
-    (x/multiplex xfs)))
 
 (defn map-vals [f coll]
   (->> coll
