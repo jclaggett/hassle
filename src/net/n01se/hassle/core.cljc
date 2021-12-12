@@ -153,7 +153,7 @@
     (fn transducer [rf]
       (let [rf-map (->> xfs
                         (map-indexed (fn [i xf] [i (xf rf)]))
-                        (into {}))
+                        (into (sorted-map)))
             *rf-map (volatile! rf-map)]
         (reducer
           (init [] (init rf))
@@ -218,15 +218,6 @@
        (fini [a] (fini rf (unreduced (step rf a [k])))))))
   ([k xs] (sequence (variants k) xs)))
 
-(defn match-variants-alt [xf-map]
-  (multiplex
-    (map (fn [[k xf]]
-           (comp (filter #(= k (first %)))
-                 (take-while #(= (count %) 2))
-                 (map second)
-                 xf))
-         xf-map)))
-
 (defn match-variants
   ([xf-map]
    (fn transducer [rf]
@@ -244,9 +235,8 @@
                 a' (step rf a v)]
             (if (reduced? a')
               ;; dissoc and finish this entry
-              (let [rf-map (vswap! *rf-map dissoc k)
-                    a'' (fini rf (unreduced a'))]
-                (if (empty? rf-map)
+              (let [a'' (fini rf (unreduced a'))]
+                (if (empty? (vswap! *rf-map dissoc k))
                   (reduced a'')
                   (unreduced a'')))
               a')))
