@@ -1,7 +1,6 @@
 (ns net.n01se.hassle.core
   (:require [clojure.core.async :as cca]
-            [clojure.pprint :refer [pprint]]
-            [net.cgrand.xforms :as x]))
+            [clojure.pprint :refer [pprint]]))
 
 (defn debug [msg x] (println "DEBUG:" msg) x)
 
