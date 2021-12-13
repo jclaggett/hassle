@@ -75,6 +75,12 @@
        {:stdout #{a b}}))
 
 (def ex13
+  (net {a :stdin}
+       b (node a (map #(str % "-b")) 'b)
+       c (node #{a b} (map #(str % "-c")) 'c)
+       {:stdout #{a c}}))
+
+(def ex14
   (net {c1 ::ch1
         c2 ::ch2}
        n1 (node c1 (map #(str "n1-" %)))

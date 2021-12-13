@@ -52,12 +52,13 @@
 
   ([net-map trees super-node-key]
    (reduce
-     (fn [net-map [tree-type sub-trees args :as tree]]
+     (fn [net-map [tree-type sub-trees args label :as tree]]
        (let [node-key (hash tree)]
          (cond-> net-map
            (not (contains? net-map node-key))
            (assoc node-key {:type tree-type
                             :args args
+                            :label label
                             :inputs #{}
                             :outputs #{}})
 
@@ -174,34 +175,36 @@
                         @*rf-map)))))))
 
 (defn demultiplex #_constructor
-  ([inputs xf] (if (= 1 (count inputs)) xf (demultiplex xf)))
-  ([xf]
-   (let [*ref-count (volatile! 0)
-         *cache (volatile! {})]
-     (fn transducer [rf]
-       (if (< 1 (vswap! *ref-count inc))
-         (:rf @*cache)
-         (let [rf' (xf rf)
-               rf'' (reducer
-                      (init []
-                       (if (contains? @*cache :init)
-                         (:init @*cache)
-                         (:init (vswap! *cache assoc :init (init rf')))))
-                      (step [a v]
-                       (if (contains? @*cache :reduced)
-                         (@*cache :reduced)
-                         (let [a' (step rf' a v)]
-                           (if (reduced? a')
-                             (:reduced (vswap! *cache assoc :reduced a'))
-                             a'))))
-                      (fini [a]
-                       (if (contains? @*cache :fini)
-                         (:fini @*cache)
-                         (if (or (> 1 (vswap! *ref-count dec))
-                                 (contains? @*cache :reduced))
-                           (:fini (vswap! *cache assoc :fini (fini rf' a)))
-                           a))))]
-           (:rf (vswap! *cache assoc :rf rf''))))))))
+  [inputs xf]
+  (if (= 1 (count inputs))
+    xf
+    (let [*input-count (volatile! (count inputs))
+          *cache (volatile! {})
+          label (-> xf meta :label)]
+      (fn transducer [rf]
+        (if (contains? @*cache :rf)
+          (:rf @*cache)
+          (let [rf' (xf rf)
+                rf'' (reducer
+                       (init []
+                             (if (contains? @*cache :init)
+                               (:init @*cache)
+                               (:init (vswap! *cache assoc :init (init rf')))))
+                       (step [a v]
+                             (if (contains? @*cache :reduced)
+                               (@*cache :reduced)
+                               (let [a' (step rf' a v)]
+                                 (if (reduced? a')
+                                   (:reduced (vswap! *cache assoc :reduced a'))
+                                   a'))))
+                       (fini [a]
+                             (if (contains? @*cache :fini)
+                               (:fini @*cache)
+                               (if (or (zero? (vswap! *input-count dec))
+                                       (contains? @*cache :reduced))
+                                 (:fini (vswap! *cache assoc :fini (fini rf' a)))
+                                 a))))]
+            (:rf (vswap! *cache assoc :rf rf''))))))))
 
 (defn map-vals [f coll]
   (->> coll
@@ -255,13 +258,16 @@
   (-> net-map
       (postwalk-net-map
         :outputs
-        (fn [{:keys [args inputs outputs] :as node} net-map]
-          (let [output-xfs (map net-map outputs)]
-            (condp = (:type node)
-              :input (multiplex output-xfs)
-              :node (comp (demultiplex inputs args)
-                          (multiplex output-xfs))
-              :output (demultiplex inputs (variants args))))))
+        (fn [{:keys [args inputs outputs label] :as node} net-map]
+          (let [label (if (nil? label) args label)
+                output-xfs (vary-meta (map net-map outputs) assoc :label label)]
+            (vary-meta
+              (condp = (:type node)
+                :input (multiplex output-xfs)
+                :node (comp (demultiplex inputs (vary-meta args assoc :label label))
+                            (multiplex output-xfs))
+                :output (demultiplex inputs (vary-meta (variants args) assoc :label label)))
+              assoc :label label))))
       (get-root-nodes :inputs)
       match-variants))
 
