@@ -175,36 +175,35 @@
                         @*rf-map)))))))
 
 (defn demultiplex #_constructor
-  [inputs xf]
-  (if (= 1 (count inputs))
-    xf
-    (let [*input-count (volatile! (count inputs))
-          *cache (volatile! {})
-          label (-> xf meta :label)]
-      (fn transducer [rf]
-        (if (contains? @*cache :rf)
-          (:rf @*cache)
-          (let [rf' (xf rf)
-                rf'' (reducer
-                       (init []
-                             (if (contains? @*cache :init)
-                               (:init @*cache)
-                               (:init (vswap! *cache assoc :init (init rf')))))
-                       (step [a v]
-                             (if (contains? @*cache :reduced)
-                               (@*cache :reduced)
-                               (let [a' (step rf' a v)]
-                                 (if (reduced? a')
-                                   (:reduced (vswap! *cache assoc :reduced a'))
-                                   a'))))
-                       (fini [a]
-                             (if (contains? @*cache :fini)
-                               (:fini @*cache)
-                               (if (or (zero? (vswap! *input-count dec))
-                                       (contains? @*cache :reduced))
-                                 (:fini (vswap! *cache assoc :fini (fini rf' a)))
-                                 a))))]
-            (:rf (vswap! *cache assoc :rf rf''))))))))
+  [xf]
+  (let [*ref-count (volatile! 0)
+        *cache (volatile! {})
+        label (-> xf meta :label)]
+    (fn transducer [rf]
+      (vswap! *ref-count inc)
+      (if (contains? @*cache :rf)
+        (:rf @*cache)
+        (let [rf' (xf rf)
+              rf'' (reducer
+                     (init []
+                           (if (contains? @*cache :init)
+                             (:init @*cache)
+                             (:init (vswap! *cache assoc :init (init rf')))))
+                     (step [a v]
+                           (if (contains? @*cache :reduced)
+                             (:reduced @*cache)
+                             (let [a' (step rf' a v)]
+                               (if (reduced? a')
+                                 (:reduced (vswap! *cache assoc :reduced a'))
+                                 a'))))
+                     (fini [a]
+                           (if (contains? @*cache :fini)
+                             (:fini @*cache)
+                             (if (or (zero? (vswap! *ref-count dec))
+                                     (contains? @*cache :reduced))
+                               (:fini (vswap! *cache assoc :fini (fini rf' a)))
+                               a))))]
+          (:rf (vswap! *cache assoc :rf rf'')))))))
 
 (defn map-vals [f coll]
   (->> coll
@@ -260,13 +259,18 @@
         :outputs
         (fn [{:keys [args inputs outputs label] :as node} net-map]
           (let [label (if (nil? label) args label)
-                output-xfs (vary-meta (map net-map outputs) assoc :label label)]
+                output-xfs (vary-meta (map net-map outputs) assoc :label label)
+                multiplex' (if (= (count outputs) 1) first multiplex)
+                demultiplex' (if (= (count inputs) 1) identity demultiplex)]
             (vary-meta
               (condp = (:type node)
-                :input (multiplex output-xfs)
-                :node (comp (demultiplex inputs (vary-meta args assoc :label label))
-                            (multiplex output-xfs))
-                :output (demultiplex inputs (vary-meta (variants args) assoc :label label)))
+                :input (multiplex' output-xfs)
+                :node (demultiplex' (vary-meta
+                                      (comp args (multiplex' output-xfs))
+                                      assoc :label label))
+                :output (demultiplex' (vary-meta
+                                        (variants args)
+                                        assoc :label label)))
               assoc :label label))))
       (get-root-nodes :inputs)
       match-variants))
