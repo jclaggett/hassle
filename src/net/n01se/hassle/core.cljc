@@ -210,16 +210,16 @@
        (map (fn [[k v]] [k (f v)]))
        (into {})))
 
-(defn variants
+(defn variant-stream
   ([k]
    (fn transducer [rf]
      (reducer
        (init [] (init rf))
        (step [a v] (step rf a [k v]))
        (fini [a] (fini rf (unreduced (step rf a [k])))))))
-  ([k xs] (sequence (variants k) xs)))
+  ([k xs] (sequence (variant-stream k) xs)))
 
-(defn match-variants
+(defn switch-variant-streams
   ([xf-map]
    (fn transducer [rf]
      (let [rf-map (map-vals (fn [xf]
@@ -246,7 +246,7 @@
                   a
                   @*rf-map))))))
   ([xf-map xs]
-   (sequence (match-variants xf-map) xs)))
+   (sequence (switch-variant-streams xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
@@ -269,11 +269,11 @@
                                       (comp args (multiplex' output-xfs))
                                       assoc :label label))
                 :output (demultiplex' (vary-meta
-                                        (variants args)
+                                        (variant-stream args)
                                         assoc :label label)))
               assoc :label label))))
       (get-root-nodes :inputs)
-      match-variants))
+      switch-variant-streams))
 
 (defn run-xf [net-map inputs]
   (-> net-map
@@ -308,4 +308,3 @@
         typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
     `^{::compose-net (fn [~inputs] (let [~@body] ~outputs))}
     (let [~@typed-inputs ~@body] (make-net-map #{~@typed-outputs}))))
-  
