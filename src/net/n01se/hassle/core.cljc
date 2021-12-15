@@ -146,36 +146,32 @@
 (defmacro step [rf a v] `(~rf ~a ~v))
 (defmacro fini [rf a] `(~rf ~a))
 
-(defn multiplex #_constructor
-  [xfs]
-  (if (= 1 (count xfs))
-    (first xfs)
-    (fn transducer [rf]
-      (let [rf-map (->> xfs
-                        (map-indexed (fn [i xf] [i (xf rf)]))
-                        (into (sorted-map)))
-            *rf-map (volatile! rf-map)]
-        (reducer
-          (init [] (init rf))
-          (step [a v]
-                (reduce
-                  (fn [a [k rf]]
-                    (let [a' (step rf a v)]
-                      (if (reduced? a')
-                        (let [a'' (fini rf (unreduced a'))]
-                          (if (empty? (vswap! *rf-map dissoc k))
-                            (reduced a'')
-                            (unreduced a'')))
-                        a')))
-                  a
-                  @*rf-map))
-          (fini [a]
-                (reduce (fn [a [_ rf]] (fini rf a))
-                        a
-                        @*rf-map)))))))
+(defn multiplex [xfs]
+  (fn transducer [rf]
+    (let [rf-map (->> xfs
+                      (map-indexed (fn [i xf] [i (xf rf)]))
+                      (into (sorted-map)))
+          *rf-map (volatile! rf-map)]
+      (reducer
+        (init [] (init rf))
+        (step [a v]
+              (reduce
+                (fn [a [k rf]]
+                  (let [a' (step rf a v)]
+                    (if (reduced? a')
+                      (let [a'' (fini rf (unreduced a'))]
+                        (if (empty? (vswap! *rf-map dissoc k))
+                          (reduced a'')
+                          (unreduced a'')))
+                      a')))
+                a
+                @*rf-map))
+        (fini [a]
+              (reduce (fn [a [_ rf]] (fini rf a))
+                      a
+                      @*rf-map))))))
 
-(defn demultiplex #_constructor
-  [xf]
+(defn demultiplex [xf]
   (let [*ref-count (volatile! 0)
         *cache (volatile! {})
         label (-> xf meta :label)]
@@ -210,16 +206,28 @@
        (map (fn [[k v]] [k (f v)]))
        (into {})))
 
-(defn variant-stream
+(defn vstream
   ([k]
    (fn transducer [rf]
      (reducer
        (init [] (init rf))
        (step [a v] (step rf a [k v]))
        (fini [a] (fini rf (unreduced (step rf a [k])))))))
-  ([k xs] (sequence (variant-stream k) xs)))
+  ([k xs] (sequence (vstream k) xs)))
 
-(defn switch-variant-streams
+(defn switch-vstreams-alt
+  ([xf-map]
+   (->> xf-map
+        (map (fn [[k xf]]
+               (comp (filter #(= (first %) k))
+                     (take-while #(= (count %) 2))
+                     (map second)
+                     xf)))
+        multiplex))
+  ([xf-map xs]
+   (sequence (switch-vstreams-alt xf-map) xs)))
+
+(defn switch-vstreams
   ([xf-map]
    (fn transducer [rf]
      (let [rf-map (map-vals (fn [xf]
@@ -246,7 +254,7 @@
                   a
                   @*rf-map))))))
   ([xf-map xs]
-   (sequence (switch-variant-streams xf-map) xs)))
+   (sequence (switch-vstreams xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
@@ -269,11 +277,11 @@
                                       (comp args (multiplex' output-xfs))
                                       assoc :label label))
                 :output (demultiplex' (vary-meta
-                                        (variant-stream args)
+                                        (vstream args)
                                         assoc :label label)))
               assoc :label label))))
       (get-root-nodes :inputs)
-      switch-variant-streams))
+      switch-vstreams))
 
 (defn run-xf [net-map inputs]
   (-> net-map
