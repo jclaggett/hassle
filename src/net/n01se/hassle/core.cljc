@@ -206,13 +206,19 @@
        (map (fn [[k v]] [k (f v)]))
        (into {})))
 
-(defn vstream
-  ([k]
+
+(defn final
+  ([x]
    (fn transducer [rf]
      (reducer
-       (init [] (init rf))
-       (step [a v] (step rf a [k v]))
-       (fini [a] (fini rf (unreduced (step rf a [k])))))))
+       (init [] (init []))
+       (step [a v] (step rf a v))
+       (fini [a] (fini rf (unreduced (step rf a x)))))))
+  ([x xs] (sequence (final x) xs)))
+
+(defn vstream
+  ([k] (comp (map (fn [x] [k x]))
+             (final [k])))
   ([k xs] (sequence (vstream k) xs)))
 
 (defn switch-vstreams-alt
@@ -224,8 +230,7 @@
                      (map second)
                      xf)))
         multiplex))
-  ([xf-map xs]
-   (sequence (switch-vstreams-alt xf-map) xs)))
+  ([xf-map xs] (sequence (switch-vstreams-alt xf-map) xs)))
 
 (defn switch-vstreams
   ([xf-map]
@@ -253,15 +258,14 @@
           (reduce (fn [a [_ rf]] (fini rf a))
                   a
                   @*rf-map))))))
-  ([xf-map xs]
-   (sequence (switch-vstreams xf-map) xs)))
+  ([xf-map xs] (sequence (switch-vstreams xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
        (map (fn [[k v]] [k (net-map v)]))
        (into {})))
 
-(defn transduce-net-map [net-map]
+(defn dagduce [net-map]
   (-> net-map
       (postwalk-net-map
         :outputs
@@ -285,7 +289,7 @@
 
 (defn run-xf [net-map inputs]
   (-> net-map
-      transduce-net-map
+      dagduce
       (sequence inputs)))
 
 (defn drain-net-map [net-map]
