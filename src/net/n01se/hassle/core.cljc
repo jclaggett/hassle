@@ -146,6 +146,15 @@
 (defmacro step [rf a v] `(~rf ~a ~v))
 (defmacro fini [rf a] `(~rf ~a))
 
+(defn final
+  ([x]
+   (fn transducer [rf]
+     (reducer
+       (init [] (init []))
+       (step [a v] (step rf a v))
+       (fini [a] (fini rf (unreduced (step rf a x)))))))
+  ([x xs] (sequence (final x) xs)))
+
 (defn multiplex [xfs]
   (fn transducer [rf]
     (let [rf-map (->> xfs
@@ -201,64 +210,20 @@
                                a))))]
           (:rf (vswap! *cache assoc :rf rf'')))))))
 
-(defn map-vals [f coll]
-  (->> coll
-       (map (fn [[k v]] [k (f v)]))
-       (into {})))
-
-
-(defn final
-  ([x]
-   (fn transducer [rf]
-     (reducer
-       (init [] (init []))
-       (step [a v] (step rf a v))
-       (fini [a] (fini rf (unreduced (step rf a x)))))))
-  ([x xs] (sequence (final x) xs)))
-
-(defn vstream
+(defn tag
   ([k] (comp (map (fn [x] [k x]))
              (final [k])))
-  ([k xs] (sequence (vstream k) xs)))
+  ([k xs] (sequence (tag k) xs)))
 
-(defn switch-vstreams-alt
-  ([xf-map]
-   (->> xf-map
-        (map (fn [[k xf]]
-               (comp (filter #(= (first %) k))
-                     (take-while #(= (count %) 2))
-                     (map second)
-                     xf)))
-        multiplex))
-  ([xf-map xs] (sequence (switch-vstreams-alt xf-map) xs)))
+(defn detag
+  ([k] (comp (filter #(= (first %) k))
+             (take-while #(= (count %) 2))
+             (map second)))
+  ([k xs] (sequence (detag k) xs)))
 
-(defn switch-vstreams
-  ([xf-map]
-   (fn transducer [rf]
-     (let [rf-map (map-vals (fn [xf]
-                              ((comp (take-while #(= (count %) 2))
-                                     (map second)
-                                     xf)
-                               rf))
-                            xf-map)
-           *rf-map (volatile! rf-map)]
-       (reducer
-         (init [] (init rf))
-         (step [a [k :as v]]
-          (let [rf (get @*rf-map k (fn no-op-step [a v] a))
-                a' (step rf a v)]
-            (if (reduced? a')
-              ;; dissoc and finish this entry
-              (let [a'' (fini rf (unreduced a'))]
-                (if (empty? (vswap! *rf-map dissoc k))
-                  (reduced a'')
-                  (unreduced a'')))
-              a')))
-         (fini [a]
-          (reduce (fn [a [_ rf]] (fini rf a))
-                  a
-                  @*rf-map))))))
-  ([xf-map xs] (sequence (switch-vstreams xf-map) xs)))
+(defn switch-tags
+  ([xf-map] (multiplex (map (fn [[k xf]] (comp (detag k) xf)) xf-map)))
+  ([xf-map xs] (sequence (switch-tags xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
@@ -281,11 +246,11 @@
                                       (comp args (multiplex' output-xfs))
                                       assoc :label label))
                 :output (demultiplex' (vary-meta
-                                        (vstream args)
+                                        (tag args)
                                         assoc :label label)))
               assoc :label label))))
       (get-root-nodes :inputs)
-      switch-vstreams))
+      switch-tags))
 
 (defn run-xf [net-map inputs]
   (-> net-map
