@@ -1,8 +1,10 @@
 (ns net.n01se.hassle.hw
-  (:require [net.n01se.hassle.core :as h
-             :refer [start node net]]
+  (:require [clojure.pprint :refer [pprint]]
             [clojure.core.async :as cca]
-            [clojure.pprint :refer [pprint]]))
+
+            [net.n01se.hassle.core :as h]
+            [net.n01se.hassle.transducers :as t]
+            [net.n01se.hassle.net :as n :refer [node net]]))
 
 (defmethod h/io-chan ::ch [_] (cca/chan))
 

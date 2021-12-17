@@ -1,13 +1,8 @@
 (ns net.n01se.hassle.core
   (:require [clojure.core.async :as cca]
-            [clojure.pprint :refer [pprint]]))
+            [clojure.pprint :refer [pprint]]
 
-(defn debug [msg x] (println "DEBUG:" msg) x)
-
-(defn input [& args] (concat [:input #{}] args))
-(defn node [& args] (cons :node args))
-(defn output [& args] (cons :output args))
-(defn outputs [& args] (set args))
+            [net.n01se.hassle.net :refer [postwalk-net-map]]))
 
 (defn merge-ch [out-chs]
   (condp = (count out-chs)
@@ -44,68 +39,6 @@
 (defmethod io-chan :stdout [_]
   (cca/chan 1 (map #(doto % println))))
 
-(defn make-net-map
-  ([trees] (make-net-map {:inputs {}
-                          :outputs {}}
-                         trees
-                         nil))
-
-  ([net-map trees super-node-key]
-   (reduce
-     (fn [net-map [tree-type sub-trees args label :as tree]]
-       (let [node-key (hash tree)]
-         (cond-> net-map
-           (not (contains? net-map node-key))
-           (assoc node-key {:type tree-type
-                            :args args
-                            :label label
-                            :inputs #{}
-                            :outputs #{}})
-
-           (= tree-type :input)
-           (-> (assoc-in [:inputs args] node-key)
-               (update node-key dissoc :inputs))
-
-           (= tree-type :output)
-           (-> (assoc-in [:outputs args] node-key)
-               (update node-key dissoc :outputs))
-
-           (not (nil? super-node-key))
-           (-> (update-in [node-key :outputs] conj super-node-key)
-               (update-in [super-node-key :inputs] conj node-key))
-
-           true
-           (make-net-map sub-trees node-key))))
-
-     net-map
-     (if (set? trees) trees #{trees}))))
-
-(defn postwalk-net-map [orig-net-map kids-fn update-fn]
-  (letfn [(update-node [net-map node-key]
-            (update net-map node-key update-fn net-map))
-
-          (visit-node [net-map node-key]
-            (if (contains? (-> net-map meta ::visited) node-key)
-              net-map
-              (-> net-map
-                  (vary-meta update ::visited conj node-key)
-                  (visit-nodes (kids-fn (net-map node-key)))
-                  (update-node node-key))))
-
-          (visit-nodes [net-map node-keys]
-            (reduce visit-node net-map node-keys))
-
-          (get-root-node-keys []
-            (let [roots-fn (case kids-fn
-                             :inputs :outputs
-                             :outputs :inputs
-                             :none)]
-              (-> orig-net-map roots-fn vals)))]
-
-    (-> orig-net-map
-        (vary-meta assoc ::visited #{})
-        (visit-nodes (get-root-node-keys)))))
-
 (defn get-io-chan [net-map opposites args]
   ;; Tempting to use get-in's default value but that would cause io-chan to
   ;; always be called which is bad since it creates a channel.
@@ -131,131 +64,6 @@
                :out-ch out-ch)))))
 
 ;; Transducer specific code
-(defmacro reducer
-  [[init & init-body]
-   [step & step-body]
-   [fini & fini-body]]
-  (assert (= init 'init) (str "Expected init but got: " init))
-  (assert (= step 'step) (str "Expected step but got: " step))
-  (assert (= fini 'fini) (str "Expected fini but got: " fini))
-  `(fn ~'reducer
-     ~init-body
-     ~step-body
-     ~fini-body))
-(defmacro init [rf] `(~rf))
-(defmacro step [rf a v] `(~rf ~a ~v))
-(defmacro fini [rf a] `(~rf ~a))
-
-(defn final
-  ([x]
-   (fn transducer [rf]
-     (reducer
-       (init [] (init []))
-       (step [a v] (step rf a v))
-       (fini [a] (fini rf (unreduced (step rf a x)))))))
-  ([x xs] (sequence (final x) xs)))
-
-(defn multiplex [xfs]
-  (fn transducer [rf]
-    (let [rf-map (->> xfs
-                      (map-indexed (fn [i xf] [i (xf rf)]))
-                      (into (sorted-map)))
-          *rf-map (volatile! rf-map)]
-      (reducer
-        (init [] (init rf))
-        (step [a v]
-              (reduce
-                (fn [a [k rf]]
-                  (let [a' (step rf a v)]
-                    (if (reduced? a')
-                      (let [a'' (fini rf (unreduced a'))]
-                        (if (empty? (vswap! *rf-map dissoc k))
-                          (reduced a'')
-                          (unreduced a'')))
-                      a')))
-                a
-                @*rf-map))
-        (fini [a]
-              (reduce (fn [a [_ rf]] (fini rf a))
-                      a
-                      @*rf-map))))))
-
-(defn demultiplex [xf]
-  (let [*ref-count (volatile! 0)
-        *cache (volatile! {})
-        label (-> xf meta :label)]
-    (fn transducer [rf]
-      (vswap! *ref-count inc)
-      (if (contains? @*cache :rf)
-        (:rf @*cache)
-        (let [rf' (xf rf)
-              rf'' (reducer
-                     (init []
-                           (if (contains? @*cache :init)
-                             (:init @*cache)
-                             (:init (vswap! *cache assoc :init (init rf')))))
-                     (step [a v]
-                           (if (contains? @*cache :reduced)
-                             (:reduced @*cache)
-                             (let [a' (step rf' a v)]
-                               (if (reduced? a')
-                                 (:reduced (vswap! *cache assoc :reduced a'))
-                                 a'))))
-                     (fini [a]
-                           (if (contains? @*cache :fini)
-                             (:fini @*cache)
-                             (if (or (zero? (vswap! *ref-count dec))
-                                     (contains? @*cache :reduced))
-                               (:fini (vswap! *cache assoc :fini (fini rf' a)))
-                               a))))]
-          (:rf (vswap! *cache assoc :rf rf'')))))))
-
-(defn tag
-  ([k] (comp (map (fn [x] [k x]))
-             (final [k])))
-  ([k xs] (sequence (tag k) xs)))
-
-(defn detag
-  ([k] (comp (filter #(= (first %) k))
-             (take-while #(= (count %) 2))
-             (map second)))
-  ([k xs] (sequence (detag k) xs)))
-
-(defn match-tags
-  ([xf-map] (multiplex (map (fn [[k xf]] (comp (detag k) xf)) xf-map)))
-  ([xf-map xs] (sequence (match-tags xf-map) xs)))
-
-(defn get-root-nodes [net-map root]
-  (->> (net-map root)
-       (map (fn [[k v]] [k (net-map v)]))
-       (into {})))
-
-(defn dagduce [net-map]
-  (-> net-map
-      (postwalk-net-map
-        :outputs
-        (fn [{:keys [args inputs outputs label] :as node} net-map]
-          (let [label (if (nil? label) args label)
-                output-xfs (vary-meta (map net-map outputs) assoc :label label)
-                multiplex' (if (= (count outputs) 1) first multiplex)
-                demultiplex' (if (= (count inputs) 1) identity demultiplex)]
-            (vary-meta
-              (condp = (:type node)
-                :input (multiplex' output-xfs)
-                :node (demultiplex' (vary-meta
-                                      (comp args (multiplex' output-xfs))
-                                      assoc :label label))
-                :output (demultiplex' (vary-meta
-                                        (tag args)
-                                        assoc :label label)))
-              assoc :label label))))
-      (get-root-nodes :inputs)
-      match-tags))
-
-(defn run-xf [net-map inputs]
-  (-> net-map
-      dagduce
-      (sequence inputs)))
 
 (defn drain-net-map [net-map]
   (let [pure-outputs (->> (:outputs net-map)
@@ -276,12 +84,3 @@
               (net-map :outputs))
        (map (fn [[k v]] [k (get-in net-map [v :ch])]))
        (into {})))
-
-(defmacro net [& args]
-  (let [inputs (first args)
-        typed-inputs (mapcat (fn [[k v]] [k (list `list :input #{} v)]) inputs)
-        body (drop-last (rest args))
-        outputs (last args)
-        typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
-    `^{::compose-net (fn [~inputs] (let [~@body] ~outputs))}
-    (let [~@typed-inputs ~@body] (make-net-map #{~@typed-outputs}))))
