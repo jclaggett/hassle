@@ -221,9 +221,9 @@
              (map second)))
   ([k xs] (sequence (detag k) xs)))
 
-(defn switch-tags
+(defn match-tags
   ([xf-map] (multiplex (map (fn [[k xf]] (comp (detag k) xf)) xf-map)))
-  ([xf-map xs] (sequence (switch-tags xf-map) xs)))
+  ([xf-map xs] (sequence (match-tags xf-map) xs)))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
@@ -250,7 +250,7 @@
                                         assoc :label label)))
               assoc :label label))))
       (get-root-nodes :inputs)
-      switch-tags))
+      match-tags))
 
 (defn run-xf [net-map inputs]
   (-> net-map

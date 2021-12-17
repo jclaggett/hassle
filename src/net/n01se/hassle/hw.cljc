@@ -89,7 +89,6 @@
        n4 (node #{n1 n2} (comp (map #(str % "-n4")) (take 2)))
        {:stdout #{n3 n4}}))
 
-
 (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
 
 (def dir-cmd-xf

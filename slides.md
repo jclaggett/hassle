@@ -2,10 +2,9 @@
 
 ## transducer 1: final
 ```clojure
-(final 3 [0 1 2])
-  ;=> (0 1 2 3)
-(sequence (final 4) (range 3))
-  ;=> (0 1 2 3)
+  ;=> (v1 v2 v3)
+(final :last)
+  ;=> (v1 v2 v3 :last)
 ```
 
 ### transducer 1: discussion
@@ -19,74 +18,70 @@ See also: cgrand's xform/wrap
 ;; TODO
 ```
 
-## transducer 2: vstream
+## transducer 2: tag
 ```clojure
-(vstream :a [0 1 2])
-  #_([:a 0] [:a 1] [:a 2] [:a])
+  ;=> (0 1 2)
+(tag :a)
+  ;=> ([:a 0] [:a 1] [:a 2] [:a])
 ```
 
-### transducer 2: discussion
-The benefit of variant streams is they _can_ be crossed! And also separated. In
-short, they serialize nicely.
+## transducer 3: detag
+The benefit of tagged values is they can be merged with other tagged values and
+pulled apart later. They serialize nicely.
 
 ```clojure
-([:a 0] [:b 1] [:b 0] [:a 1] [:b] [:a 2] [:a])
+  ;=> ([:a 0] [:b -1] [:b -2] [:a 1] [:b] [:a 2] [:a])
+(detag :a)
+  ;=> (0 1 2)
+
+  ;=> ([:a 0] [:b -1] [:b -2] [:a 1] [:b] [:a 2] [:a])
+(detag :b)
+  ;=> (-1 -2)
 ```
 
-### transducer 2: implementation
+## transducers 2 & 3: tag & detag implementation
 ```clojure
 ;; TODO
 ```
 
-## transducer 3: multiplex
+## transducer 4: multiplex
 ```clojure
-(multiplex [identity identity] (range 3))
-  #_(0 0 1 1 2 2)
-(multiplex [(take 2) (map -)] (range 3))
-  #_(0 0 1 -1 -2)
-(multiplex [(comp (take 2) (vstream :a))
-            (comp (map -) (vstream :b))]
-           (range 3))
-  #_([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b])
-```
+  ;=> (0 1 2)
+(multiplex [identity identity])
+  ;=> (0 0 1 1 2 2)
 
-### transducer 3: discussion
-Roughly like juxt.
-See also: cgrand's xform/multiplex
+  ;=> (0 1 2)
+(multiplex [(take 2) (map -)])
+  ;=> #_(0 0 1 -1 -2)
 
-## transducer 4: switch-vstreams
-```clojure
-(def input '([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b]))
-(switch-vstreams [[:a identity] [:b identity]] input)
-  #_(0 0 1 1 2 2)
+  ;=> (0 1 2)
+(multiplex [(comp (take 2) (tag :a))
+            (comp (map -) (tag :b))])
+  ;=> #_([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b])
 ```
 
 ### transducer 4: discussion
-Could use a better name...
-
-### transducer 4: implemenation
-```clojure
-;; TODO
-```
+Roughly like juxt.
+See also: cgrand's xform/multiplex
 
 ## transducer 5: demultiplex
 ```clojure
-(demultiplex (comp (take 2) (vstream :out)) (range 3))
-  #_([:out 0] [:out 1] [:out])
-
-(def input '([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b]))
-(def shared (demultiplex (comp (take 2) (vstream :out)))
-(switch-vstreams {:a (comp (map inc) shared)
-                  :b (comp (map dec) shared)}
-                 input)
-  #_([:out 1] [:out -1] [:out])
+  ;=> (0 1 2)
+(let [shared (demultiplex (comp (take 2) (tag :out)))]
+  (multiplex [(comp (detag :a) shared) (comp (detag :b) shared)]))
+  ;=> (0 0 1 1 2 2)
 ```
 
 ### transducer 5: discussion
-Demuliplex with multiplex (and switch-vstreams) allows us to define DAGs of
-transducer functions and represent those DAGs as a single transducer function.
+Demuliplex with multiplex allows us to define DAGs of transducer functions and
+represent those DAGs as a single transducer function.
 
-
+## transducer 6: dagducer
+```clojure
+(def input '([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b]))
+(match-tags [[:a identity] [:b identity]] input)
+  #_(0 0 1 1 2 2)
+```
 ## transducer 6: dagducer
 
 ```clojure
