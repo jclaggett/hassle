@@ -1,4 +1,4 @@
-# dagducers and other transducers
+# netducer and other transducers
 
 ## transducer 1: final
 ```clojure
@@ -76,13 +76,13 @@ See also: cgrand's xform/multiplex
 Demuliplex with multiplex allows us to define DAGs of transducer functions and
 represent those DAGs as a single transducer function.
 
-## transducer 6: dagducer
+## transducer 6: netducer
 ```clojure
 (def input '([:a 0] [:b 0] [:a 1] [:a] [:b -1] [:b -2] [:b]))
 (match-tags [[:a identity] [:b identity]] input)
   #_(0 0 1 1 2 2)
 ```
-## transducer 6: dagducer
+## transducer 6: netducer
 
 ```clojure
 ;; TODO
