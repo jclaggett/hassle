@@ -107,6 +107,10 @@
        (map (fn [[k v]] [k (net-map v)]))
        (into {})))
 
+(defn vary-rf-meta [xf & args]
+  (fn transducer [rf]
+    (apply vary-meta (xf rf) args)))
+
 (defn netduce
   ([net-map xs] (sequence (netduce net-map) xs))
   ([net-map]
@@ -129,4 +133,19 @@
                                          assoc :label label)))
                assoc :label label))))
        (get-root-nodes :inputs)
-       match-tags)))
+       match-tags
+       (vary-meta assoc ::net net-map)
+       (vary-rf-meta assoc ::net net-map))))
+
+(defn start-net [net-map]
+  {:log []
+   :reduced? false
+   :reducer ((netduce net-map) (completing conj))})
+
+(defn next-tag [state tag]
+  (if (:reduced? state)
+    state
+    (let [result ((:reducer state) [] tag)]
+      (-> state
+          (assoc :reduced? (reduced? result))
+          (update :log conj [tag (unreduced result)])))))
