@@ -38,17 +38,18 @@
        (reducer
          (init [] (init rf))
          (step [a v]
-               (reduce
-                 (fn [a [k rf]]
-                   (let [a' (step rf a v)]
-                     (if (reduced? a')
-                       (let [a'' (fini rf (unreduced a'))]
-                         (if (empty? (vswap! *rf-map dissoc k))
-                           (reduced a'')
-                           (unreduced a'')))
-                       a')))
-                 a
-                 @*rf-map))
+               (let [a'' (reduce
+                           (fn [a [k rf]]
+                             (let [a' (step rf a v)]
+                               (if (reduced? a')
+                                 (do (vswap! *rf-map dissoc k)
+                                     (fini rf (unreduced a')))
+                                 a')))
+                           a
+                           @*rf-map)]
+                 (if (empty? @*rf-map)
+                   (reduced a'')
+                   (unreduced a''))))
          (fini [a]
                (reduce (fn [a [_ rf]] (fini rf a))
                        a
