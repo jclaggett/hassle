@@ -3,11 +3,6 @@
 
 (defn debug [msg x] (println "DEBUG:" msg) x)
 
-(defn input [& args] (concat [:input #{}] args))
-(defn node [& args] (cons :node args))
-(defn output [& args] (cons :output args))
-(defn outputs [& args] (set args))
-
 (defn make-net-map
   ([trees] (make-net-map {:inputs {}
                           :outputs {}}
@@ -78,3 +73,14 @@
         typed-outputs (map (fn [[k v]] (list `list :output v k)) outputs)]
     `^{::compose-net (fn [~inputs] (let [~@body] ~outputs))}
     (let [~@typed-inputs ~@body] (make-net-map #{~@typed-outputs}))))
+
+;; Latest attempt at a decent API
+(defn input [v] (list :input #{} v))
+(def inputs (reify clojure.lang.IPersistentSet
+              (get [_ v] (input v))))
+(defn outputs [m] (make-net-map (set (map (fn [[k v]] (list :output v k)) m))))
+(defn output [v k] (outputs {k v}))
+
+(defn node
+  ([xf] (output (node (input :in) xf) :out))
+  ([in xf] (list :node in xf)))
