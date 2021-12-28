@@ -16,7 +16,7 @@
 
   ([net-map trees super-node-key]
    (reduce
-     (fn [net-map [tree-type sub-trees args label :as tree]]
+     (fn [net-map [tree-type args sub-trees label :as tree]]
        (let [node-key (hash tree)]
          (cond-> net-map
            (not (contains? net-map node-key))
@@ -83,7 +83,7 @@
           (let [inputs' (set (map net-map inputs))]
             (condp = (:type node)
               :input (input-map args)
-              :node (list :node inputs' args)
+              :node (list :node args inputs')
               :output inputs')))))
     assoc ::net-map net-map))
 
@@ -97,15 +97,15 @@
     (let [~@typed-inputs ~@body] (make-net-map #{~@typed-outputs}))))
 
 ;; Latest attempt at a decent API
-(defn input [v] (list :input #{} v))
+(defn input [v] (list :input v #{}))
 (def inputs (reify clojure.lang.IPersistentSet
               (get [_ v] (input v))))
 (defn outputs [m]
   (make-embed-fn
     (make-net-map
-      (set (map (fn [[k v]] (list :output v k)) m)))))
-(defn output [v k] (outputs {k v}))
+      (set (map (fn [[k v]] (list :output k v)) m)))))
+(defn output [k v] (outputs {k v}))
 
 (defn node
-  ([xf] (output (node (input :in) xf) :out))
-  ([in xf] (list :node in xf)))
+  ([xf] (output :out (node xf (input :in))))
+  ([xf in] (list :node xf in)))
