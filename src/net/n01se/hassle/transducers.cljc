@@ -102,11 +102,6 @@
   ([xf-map xs] (sequence (match-tags xf-map) xs))
   ([xf-map] (multiplex (map (fn [[k xf]] (comp (detag k) xf)) xf-map))))
 
-(defn get-root-nodes [net-map root]
-  (->> (net-map root)
-       (map (fn [[k v]] [k (net-map v)]))
-       (into {})))
-
 (defn vary-rf-meta [xf & args]
   (fn transducer [rf]
     (apply vary-meta (xf rf) args)))
@@ -116,7 +111,7 @@
   ([net-map]
    (-> net-map
        (postwalk-net-map
-         :outputs
+         :inputs
          (fn [{:keys [args inputs outputs label] :as node} net-map]
            (let [label (if (nil? label) args label)
                  output-xfs (vary-meta (map net-map outputs) assoc :label label)
@@ -132,7 +127,6 @@
                                          (tag args)
                                          assoc :label label)))
                assoc :label label))))
-       (get-root-nodes :inputs)
        match-tags
        (vary-meta assoc ::net net-map)
        (vary-rf-meta assoc ::net net-map))))

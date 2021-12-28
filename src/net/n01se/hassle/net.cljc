@@ -39,31 +39,44 @@
      net-map
      (if (set? trees) trees #{trees}))))
 
-(defn postwalk-net-map [orig-net-map kids-fn update-fn]
-  (letfn [(update-node [net-map node-key]
-            (update net-map node-key update-fn net-map))
+(defn get-root-nodes [net-map root]
+  (->> (net-map root)
+       (map (fn [[k v]] [k (net-map v)]))
+       (into {})))
 
-          (visit-node [net-map node-key]
-            (if (contains? (-> net-map meta ::visited) node-key)
-              net-map
-              (-> net-map
-                  (vary-meta update ::visited conj node-key)
-                  (visit-nodes (kids-fn (net-map node-key)))
-                  (update-node node-key))))
+(defn postwalk-net-map [orig-net-map root update-fn]
+  (let [kids-fn (case root
+                  :inputs :outputs
+                  :outputs :inputs
+                  :none)]
+    (letfn [(update-node [net-map node-key]
+              (update net-map node-key update-fn net-map))
 
-          (visit-nodes [net-map node-keys]
-            (reduce visit-node net-map node-keys))
+            (visit-node [net-map node-key]
+              (if (contains? (-> net-map meta ::visited) node-key)
+                net-map
+                (-> net-map
+                    (vary-meta update ::visited conj node-key)
+                    (visit-nodes (-> node-key net-map kids-fn))
+                    (update-node node-key))))
 
-          (get-root-node-keys []
-            (let [roots-fn (case kids-fn
-                             :inputs :outputs
-                             :outputs :inputs
-                             :none)]
-              (-> orig-net-map roots-fn vals)))]
+            (visit-nodes [net-map node-keys]
+              (reduce visit-node net-map node-keys))]
 
-    (-> orig-net-map
+      (-> orig-net-map
         (vary-meta assoc ::visited #{})
-        (visit-nodes (get-root-node-keys)))))
+        (visit-nodes (-> orig-net-map root vals))
+        (get-root-nodes root)))))
+
+(defn make-embed-fn [net-map]
+  (vary-meta
+    (fn embedder [input-map]
+      (-> net-map
+        (postwalk-net-map
+          :outputs
+          (fn [node net-map]
+            node))))
+    assoc ::net-map net-map))
 
 (defmacro net [& args]
   (let [inputs (first args)
