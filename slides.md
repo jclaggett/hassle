@@ -1,3 +1,21 @@
+# Inversion of control
+
+Consider the following snippet:
+```
+  ...
+  (let [text (read "file.txt")]
+    ...)
+```
+
+And this inversion of the above:
+
+```
+(let [text (input ::file)
+      work (node text ...)
+      out (output work :stdout)]
+  (weave out)
+```
+
 # netducer and other transducers
 
 ## transducer 1: final
