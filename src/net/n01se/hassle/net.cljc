@@ -3,6 +3,11 @@
 
 (defn debug [msg x] (println "DEBUG:" msg) x)
 
+(defn get-trees [t]
+  (if (set? t)
+    (mapcat get-trees t)
+    (list t)))
+
 (defn make-net-map
   ([trees] (make-net-map {:inputs {}
                           :outputs {}}
@@ -37,7 +42,7 @@
            (make-net-map sub-trees node-key))))
 
      net-map
-     (if (set? trees) trees #{trees}))))
+     (get-trees trees))))
 
 (defn get-root-nodes [net-map root]
   (->> (net-map root)
@@ -71,11 +76,15 @@
 (defn make-embed-fn [net-map]
   (vary-meta
     (fn embedder [input-map]
-      (-> net-map
-        (postwalk-net-map
-          :outputs
-          (fn [node net-map]
-            node))))
+      (postwalk-net-map
+        net-map
+        :outputs
+        (fn [{:keys [args inputs] :as node} net-map]
+          (let [inputs' (set (map net-map inputs))]
+            (condp = (:type node)
+              :input (input-map args)
+              :node (list :node inputs' args)
+              :output inputs')))))
     assoc ::net-map net-map))
 
 (defmacro net [& args]
@@ -91,7 +100,10 @@
 (defn input [v] (list :input #{} v))
 (def inputs (reify clojure.lang.IPersistentSet
               (get [_ v] (input v))))
-(defn outputs [m] (make-net-map (set (map (fn [[k v]] (list :output v k)) m))))
+(defn outputs [m]
+  (make-embed-fn
+    (make-net-map
+      (set (map (fn [[k v]] (list :output v k)) m)))))
 (defn output [v k] (outputs {k v}))
 
 (defn node
