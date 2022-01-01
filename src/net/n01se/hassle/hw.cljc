@@ -4,69 +4,86 @@
             [net.n01se.hassle.transducers :as t]
             [net.n01se.hassle.net :as n]))
 
+(defn run-ex [ex]
+  (-> ex meta ::n/net-map t/netduce
+      (sequence (-> ex meta ::ts))))
+
 (def ex1
-  (n/net #{}))
+  (vary-meta
+    (n/net #{})
+    assoc ::ts (t/tag :foo (range 3))))
 
 (def ex2
-  (->> (n/input :init)
-       (n/output :stdout)
-       n/net))
+  (vary-meta
+    (->> (n/input :init)
+         (n/output :stdout)
+         n/net)
+    assoc ::ts (t/tag :init (range 3))))
 
 (def ex3
-  (->> (n/input :init)
-       (n/node (map :argv))
-       (n/output :stdout)
-       n/net))
+  (vary-meta
+    (->> (n/input :init)
+         (n/node (map :argv))
+         (n/output :stdout)
+         n/net)
+    assoc ::ts (t/tag :init [{:argv ["ls" "-l"]}])))
 
 (def ex4
-  (->> (n/input ::ch)
-       (n/node (map #(str "Hello " %)))
-       (n/output :stdout)
-       n/net))
+  (vary-meta
+    (->> (n/input ::ch)
+         (n/node (map #(str "Hello " %)))
+         (n/output :stdout)
+         n/net)
+    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
 
 (def ex5
-  (->> (n/input :init)
-       (n/node (map #(-> % :env (get "USER"))))
-       (n/node (map #(str "Hello " %)))
-       (n/output :stdout)
-       n/net))
+  (vary-meta
+    (->> (n/input :init)
+         (n/node (map #(-> % :env (get "USER"))))
+         (n/node (map #(str "Hello " %)))
+         (n/output :stdout)
+         n/net)
+    assoc ::ts (t/tag :init [{:argv ["ls" "-l"]
+                              :env (System/getenv)}])))
 
 (def ex6
-  (->> (n/input ::ch)
-       (n/node (take 2))
-       (n/node (map #(str "Hello " %)))
-       (n/output :stdout)
-       n/net))
+  (vary-meta
+    (->> (n/input ::ch)
+         (n/node (take 2))
+         (n/node (map #(str "Hello " %)))
+         (n/output :stdout)
+         n/net)
+    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
 
 (def ex7
-  (let [{i ::ch} n/inputs
-        a (n/node (map #(str "Hello " %)) i)
-        b (n/node (map #(str "Goodbye " %)) i)
-        o (n/outputs {:stdout #{a b}})]
-    (n/net o)))
+  (vary-meta
+    (let [{i ::ch} n/inputs
+          a (n/node (map #(str "Hello " %)) i)
+          b (n/node (map #(str "Goodbye " %)) i)
+          o (n/outputs {:stdout #{a b}})]
+      (n/net o))
+    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
 
 (def ex8
-  (let [{i ::ch} n/inputs
-        a (n/node (map #(str "Goodbye " %)) i)
-        b (n/node (take 2) i)
-        c (n/node (map #(str "Hello " %)) b)
-        o (n/outputs {:stdout #{a c}})]
-    (n/net o)))
+  (vary-meta
+    (let [{i ::ch} n/inputs
+          a (n/node (map #(str "Goodbye " %)) i)
+          b (n/node (take 2) i)
+          c (n/node (map #(str "Hello " %)) b)
+          o (n/outputs {:stdout #{a c}})]
+      (n/net o))
+    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
 
 (def ex9
-  (let [{i ::ch} n/inputs
-        a (n/node (map #(str "Goodbye " %)) i)
-        {c :stdout} (ex3 {:init i})
-        o (n/outputs {:stdout #{a c}})]
-    o #_(n/net o)))
+  (vary-meta
+    (let [{i ::ch} n/inputs
+          a (n/node (map #(str "Goodbye " %)) i)
+          {c :stdout} (ex6 {::ch i})
+          o (n/outputs {:stdout #{a c}})]
+      (n/net o))
+    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
 
 (comment
-  #_
-  (def ex9
-    (net {input ::ch}
-         a (node input (map #(str "Goodbye " %)))
-         {c :stdout} (embed ex3 {::ch input})
-         {:stdout #{a c}}))
 
   (def ex10
     (net {input ::ch}
