@@ -81,9 +81,12 @@
           (fn [{xf :xf} [node-type node-id] inputs]
             (condp = node-type
               :inputs (input-map node-id)
-              :nodes (node xf inputs)
-              :outputs inputs)))))
+              :nodes (node xf (set inputs))
+              :outputs (set inputs))))))
     assoc ::net-map net-map))
+
+(defn net [tree]
+  (make-embed-fn (make-net-map tree)))
 
 ;; Latest attempt at a decent API
 (defn input [v] (list :input v #{} (gensym 'i)))
@@ -91,11 +94,12 @@
               (get [_ v] (input v))))
 
 (defn output [k v] (list :output k v (gensym 'o)))
-(defn outputs [m] (set (map output m)))
+(defn outputs [m] (set (map (fn [[k v]] (output k v)) m)))
 
 (defn node
-  ([xf] (output :out (node xf (input :in))))
+  ([xf] (net (output :out (node xf (input :in)))))
   ([xf in] (list :node xf in (gensym 'n))))
 
-(defn net [tree]
-  (make-embed-fn (make-net-map tree)))
+(defn pr-net [f]
+  (doto (-> f meta ::net-map compact-net-map)
+    pprint))
