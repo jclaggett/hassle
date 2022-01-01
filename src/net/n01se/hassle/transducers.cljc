@@ -112,21 +112,14 @@
    (-> net-map
        (postwalk-net-map
          :inputs
-         (fn [{:keys [args inputs outputs label] :as node} net-map]
-           (let [label (if (nil? label) args label)
-                 output-xfs (vary-meta (map net-map outputs) assoc :label label)
-                 multiplex' (if (= (count outputs) 1) first multiplex)
+         (fn [{:keys [xf inputs outputs]} [node-type node-id] output-xfs]
+           (let [multiplex' (if (= (count outputs) 1) first multiplex)
                  demultiplex' (if (= (count inputs) 1) identity demultiplex)]
-             (vary-meta
-               (condp = (:type node)
-                 :input (multiplex' output-xfs)
-                 :node (demultiplex' (vary-meta
-                                       (comp args (multiplex' output-xfs))
-                                       assoc :label label))
-                 :output (demultiplex' (vary-meta
-                                         (tag args)
-                                         assoc :label label)))
-               assoc :label label))))
+             (condp = node-type
+               :inputs (multiplex' output-xfs)
+               :nodes (demultiplex' (comp xf (multiplex' output-xfs)))
+               :outputs (demultiplex' (tag node-id))))))
+       :inputs
        match-tags
        (vary-meta assoc ::net net-map)
        (vary-rf-meta assoc ::net net-map))))
