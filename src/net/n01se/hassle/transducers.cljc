@@ -130,18 +130,18 @@
        (vary-meta assoc ::net net-map)
        (vary-rf-meta assoc ::net net-map))))
 
-(defn start-net [net-map]
-  {:log []
-   :reduced? false
-   :reducer ((netduce net-map) (completing conj))})
 
-(defn next-tag [state tag]
-  (if (:reduced? state)
-    state
-    (let [result ((:reducer state) [] tag)]
-      (-> state
-          (assoc :reduced? (reduced? result))
-          (update :log conj [tag (unreduced result)])))))
+(defn net-transducer [net-tree]
+  (fn transducer [rf]
+    ((-> net-tree n/make-net-map netduce) rf)))
+
+(defn get-input-trees [input-xfs]
+  (let [input-trees (->> input-xfs
+                         n/get-input-trees
+                         (map (comp ::net-tree meta)))]
+    (assert (not (empty? input-trees)) "Must specify at least one input.")
+    (assert (not-any? nil? input-trees) "All inputs must be net transducers.")
+    (set input-trees)))
 
 ;; Newest, take on an API. Take 5?
 (defn input
@@ -149,20 +149,8 @@
   ([k]
    (let [net-tree (n/input k)]
      (vary-meta
-       (fn transducer [rf]
-         ((-> net-tree
-              n/make-net-map
-              netduce)
-          rf))
+       (net-transducer net-tree)
        assoc ::net-tree net-tree))))
-
-(defn get-input-trees [input-xfs]
-  (let [input-trees (->> input-xfs
-                         n/get-trees
-                         (map (comp ::net-tree meta)))]
-    (assert (not (empty? input-trees)) "Must specify at least one input.")
-    (assert (not-any? nil? input-trees) "All inputs must be net transducers.")
-    (set input-trees)))
 
 (defn node
   ([xf inputs xs] (sequence (node xf inputs) xs))
@@ -170,11 +158,7 @@
    (let [input-trees (get-input-trees input-xfs)
          net-tree (n/node xf input-trees)]
      (vary-meta
-       (fn transducer [rf]
-         ((-> net-tree
-              n/make-net-map
-              netduce)
-          rf))
+       (net-transducer net-tree)
        assoc ::net-tree net-tree))))
 
 (defn outputs
@@ -184,10 +168,4 @@
                              (map (fn [[k v]] [k (get-input-trees v)]))
                              (into {}))
          net-tree (n/outputs input-tree-map)]
-     (vary-meta
-       (fn transducer [rf]
-         ((-> net-tree
-              n/make-net-map
-              netduce)
-          rf))
-       assoc ::net-tree net-tree))))
+     (net-transducer net-tree))))

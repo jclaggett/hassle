@@ -8,9 +8,9 @@
 ;; implementation
 (def conj-set (fnil conj #{}))
 
-(defn get-trees [x]
+(defn get-input-trees [x]
   (if (set? x)
-    (mapcat get-trees x)
+    (mapcat get-input-trees x)
     (list x)))
 
 (defn make-net-map
@@ -38,7 +38,7 @@
                   :output (-> net-map
                               (make-nodes sub-trees [:outputs args]))))
               net-map
-              (get-trees trees)))]
+              (get-input-trees trees)))]
     (make-nodes {} trees nil)))
 
 (defn postwalk-net-map [orig-net-map root update-fn]
