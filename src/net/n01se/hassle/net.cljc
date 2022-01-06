@@ -8,25 +8,33 @@
 ;; implementation
 (def conj-set (fnil conj #{}))
 
+(defn get-trees [x]
+  (if (set? x)
+    (mapcat get-trees x)
+    (list x)))
+
 (defn make-net-map
   [trees]
-  (letfn [(get-trees [x]
-            (if (set? x)
-              (mapcat get-trees x)
-              (list x)))
-
-          (make-nodes [net-map trees super-path]
+  (letfn [(make-nodes [net-map trees super-path]
             (reduce
               (fn [net-map [tree-type args sub-trees id label :as tree]]
                 (condp = tree-type
-                  :input (-> net-map
-                             (update-in [:inputs args :outputs] conj-set super-path)
-                             (update-in (conj super-path :inputs) conj-set [:inputs args]))
-                  :node (-> net-map
-                            (assoc-in [:nodes id :xf] args)
-                            (update-in [:nodes id :outputs] conj-set super-path)
-                            (update-in (conj super-path :inputs) conj-set [:nodes id])
-                            (make-nodes sub-trees [:nodes id]))
+                  :input (if (nil? super-path)
+                           (assoc-in net-map [:inputs args :outputs] #{})
+                           (-> net-map
+                               (update-in [:inputs args :outputs]
+                                          conj-set super-path)
+                               (update-in (conj super-path :inputs)
+                                          conj-set [:inputs args])))
+                  :node (if (nil? super-path)
+                          (-> net-map
+                              (assoc-in [:nodes id :xf] args)
+                              (make-nodes sub-trees [:nodes id]))
+                          (-> net-map
+                              (assoc-in [:nodes id :xf] args)
+                              (update-in [:nodes id :outputs] conj-set super-path)
+                              (update-in (conj super-path :inputs) conj-set [:nodes id])
+                              (make-nodes sub-trees [:nodes id])))
                   :output (-> net-map
                               (make-nodes sub-trees [:outputs args]))))
               net-map
@@ -61,7 +69,7 @@
   (letfn [(compact-paths [paths] (map second paths))]
     (postwalk-net-map
       net-map
-      :outputs
+      :inputs
       (fn [node [node-type] _]
         (condp = node-type
           :inputs (-> node :outputs compact-paths)

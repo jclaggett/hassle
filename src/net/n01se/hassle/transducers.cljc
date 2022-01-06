@@ -1,7 +1,7 @@
 (ns net.n01se.hassle.transducers
   (:require [clojure.pprint :refer [pprint]]
 
-            [net.n01se.hassle.net :refer [postwalk-net-map]]))
+            [net.n01se.hassle.net :as n :refer [postwalk-net-map]]))
 
 (defmacro reducer
   [[init & init-body]
@@ -100,7 +100,12 @@
 
 (defn match-tags
   ([xf-map xs] (sequence (match-tags xf-map) xs))
-  ([xf-map] (multiplex (map (fn [[k xf]] (comp (detag k) xf)) xf-map))))
+  ([xf-map] (multiplex (map (fn [[k xf]]
+                              (comp (filter #(and (sequential? %)
+                                                  (<= 1 (count %) 2)))
+                                    (detag k)
+                                    xf))
+                            xf-map))))
 
 (defn vary-rf-meta [xf & args]
   (fn transducer [rf]
@@ -113,11 +118,12 @@
        (postwalk-net-map
          :inputs
          (fn [{:keys [xf inputs outputs]} [node-type node-id] output-xfs]
-           (let [multiplex' (if (= (count outputs) 1) first multiplex)
+           (let [output-xfs' (if (empty? output-xfs) [identity] output-xfs)
+                 multiplex' (if (= (count output-xfs') 1) first multiplex)
                  demultiplex' (if (= (count inputs) 1) identity demultiplex)]
              (condp = node-type
-               :inputs (multiplex' output-xfs)
-               :nodes (demultiplex' (comp xf (multiplex' output-xfs)))
+               :inputs (multiplex' output-xfs')
+               :nodes (demultiplex' (comp xf (multiplex' output-xfs')))
                :outputs (demultiplex' (tag node-id))))))
        :inputs
        match-tags
@@ -136,3 +142,52 @@
       (-> state
           (assoc :reduced? (reduced? result))
           (update :log conj [tag (unreduced result)])))))
+
+;; Newest, take on an API. Take 5?
+(defn input
+  ([k xs] (sequence (input k) xs))
+  ([k]
+   (let [net-tree (n/input k)]
+     (vary-meta
+       (fn transducer [rf]
+         ((-> net-tree
+              n/make-net-map
+              netduce)
+          rf))
+       assoc ::net-tree net-tree))))
+
+(defn get-input-trees [input-xfs]
+  (let [input-trees (->> input-xfs
+                         n/get-trees
+                         (map (comp ::net-tree meta)))]
+    (assert (not (empty? input-trees)) "Must specify at least one input.")
+    (assert (not-any? nil? input-trees) "All inputs must be net transducers.")
+    (set input-trees)))
+
+(defn node
+  ([xf inputs xs] (sequence (node xf inputs) xs))
+  ([xf input-xfs]
+   (let [input-trees (get-input-trees input-xfs)
+         net-tree (n/node xf input-trees)]
+     (vary-meta
+       (fn transducer [rf]
+         ((-> net-tree
+              n/make-net-map
+              netduce)
+          rf))
+       assoc ::net-tree net-tree))))
+
+(defn outputs
+  ([input-xf-map xs] (sequence (outputs input-xf-map) xs))
+  ([input-xf-map]
+   (let [input-tree-map (->> input-xf-map
+                             (map (fn [[k v]] [k (get-input-trees v)]))
+                             (into {}))
+         net-tree (n/outputs input-tree-map)]
+     (vary-meta
+       (fn transducer [rf]
+         ((-> net-tree
+              n/make-net-map
+              netduce)
+          rf))
+       assoc ::net-tree net-tree))))
