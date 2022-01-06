@@ -138,9 +138,11 @@
 (defn get-input-trees [input-xfs]
   (let [input-trees (->> input-xfs
                          n/get-input-trees
-                         (map (comp ::net-tree meta)))]
-    (assert (not (empty? input-trees)) "Must specify at least one input.")
-    (assert (not-any? nil? input-trees) "All inputs must be net transducers.")
+                         (map #(let [net-tree (-> % meta ::net-tree)]
+                                 (assert (not (nil? net-tree))
+                                         (str "Error: bad input value: '" % "'. Must `input` or `node` net transducer."))
+                                 net-tree)))]
+    (assert (not (empty? input-trees)) "Error: Must specify at least one `input` or `node` net transducer.")
     (set input-trees)))
 
 ;; Newest, take on an API. Take 5?
