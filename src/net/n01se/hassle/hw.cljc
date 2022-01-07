@@ -101,11 +101,16 @@
       (outputs {:stdout #{a b}}))
     assoc ::ts (tag ::ch1 ["bob" "jim" "joe"])))
 
+(defn suffix
+  ([s input-xfs xs] (sequence (suffix s input-xfs) xs))
+  ([s input-xfs] (node (suffix s) input-xfs))
+  ([s] (map #(str % s))))
+
 (def ex13
   (vary-meta
     (let [{a :stdin} inputs
-          b (node (map #(str % "-b")) a)
-          c (node (map #(str % "-c")) #{a b})]
+          b (suffix "-b" a)
+          c (suffix "-c" #{a b})]
        (outputs {:stdout #{a c}}))
     assoc ::ts (tag :stdin ["bob" "jim" "joe"])))
 
@@ -113,10 +118,10 @@
   (vary-meta
     (let [{c1 ::ch1
            c2 ::ch2} inputs
-          n1 (node (map #(str % "-n1")) c1)
-          n2 (node (map #(str % "-n2")) c2)
-          n3 (node (map #(str % "-n3")) n1)
-          n4 (node (comp (map #(str % "-n4")) (take 2)) #{n1 n2})]
+          n1 (suffix "-n1" c1)
+          n2 (suffix "-n2" c2)
+          n3 (suffix "-n3" n1)
+          n4 (node (comp (suffix "-n4") (take 2)) #{n1 n2})]
       (outputs {:stdout #{n3 n4}}))
     assoc ::ts (interleave
                  (tag ::ch1 ["bob" "jim" "joe"])
