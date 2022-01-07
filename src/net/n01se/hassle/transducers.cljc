@@ -131,9 +131,11 @@
        (vary-rf-meta assoc ::net net-map))))
 
 
-(defn net-transducer [net-tree]
-  (fn transducer [rf]
-    ((-> net-tree n/make-net-map netduce) rf)))
+(defn net-transducer [net-type net-tree]
+  (vary-meta
+    (fn transducer [rf]
+      ((-> net-tree n/make-net-map netduce) rf))
+    assoc ::net-type net-type ::net-tree net-tree))
 
 (defn get-input-trees [input-xfs]
   (let [input-trees (->> input-xfs
@@ -148,26 +150,43 @@
 ;; Newest, take on an API. Take 5?
 (defn input
   ([k xs] (sequence (input k) xs))
-  ([k]
-   (let [net-tree (n/input k)]
-     (vary-meta
-       (net-transducer net-tree)
-       assoc ::net-tree net-tree))))
+  ([k] (net-transducer :inputs (n/input k))))
+
+(def inputs
+  (reify clojure.lang.IPersistentSet
+    (get [_ v] (input v))))
 
 (defn node
-  ([xf inputs xs] (sequence (node xf inputs) xs))
+  ([xf input-xfs xs] (sequence (node xf input-xfs) xs))
   ([xf input-xfs]
-   (let [input-trees (get-input-trees input-xfs)
-         net-tree (n/node xf input-trees)]
-     (vary-meta
-       (net-transducer net-tree)
-       assoc ::net-tree net-tree))))
+   (let [input-trees (get-input-trees input-xfs)]
+     (net-transducer :nodes (n/node xf input-trees)))))
 
 (defn outputs
   ([input-xf-map xs] (sequence (outputs input-xf-map) xs))
   ([input-xf-map]
    (let [input-tree-map (->> input-xf-map
                              (map (fn [[k v]] [k (get-input-trees v)]))
-                             (into {}))
-         net-tree (n/outputs input-tree-map)]
-     (net-transducer net-tree))))
+                             (into {}))]
+     (net-transducer :outputs (n/outputs input-tree-map)))))
+
+(defn output
+  ([k input-xfs xs] (sequence (output k input-xfs) xs))
+  ([k input-xfs]
+   (outputs {k input-xfs})))
+
+(defn embed
+  ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))
+  ([xf input-xf-map]
+   (-> xf
+       meta
+       ::net-tree
+       n/make-net-map
+       (n/postwalk-net-map
+         :outputs
+         (fn [{xf :xf} [node-type node-id] input-xfs]
+           (condp = node-type
+             :inputs (input-xf-map node-id)
+             :nodes (node xf (set input-xfs))
+             :outputs (set input-xfs))))
+       :outputs)))

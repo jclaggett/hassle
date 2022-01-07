@@ -1,124 +1,128 @@
 (ns net.n01se.hassle.hw
   (:require [clojure.pprint :refer [pprint]]
 
-            [net.n01se.hassle.transducers :as t]
-            [net.n01se.hassle.net :as n]))
+            [net.n01se.hassle.transducers
+             :refer [tag input inputs node output outputs embed]]))
 
-(defn run-ex [ex]
-  (-> ex meta ::n/net-map t/netduce
-      (sequence (-> ex meta ::ts))))
+(defn run-ex [xf]
+  (sequence xf (-> xf meta ::ts)))
 
 (def ex1
   (vary-meta
-    (n/net #{})
-    assoc ::ts (t/tag :foo (range 3))))
+    (input :foo)
+    assoc ::ts (tag :foo (range 3))))
 
 (def ex2
   (vary-meta
-    (->> (n/input :init)
-         (n/output :stdout)
-         n/net)
-    assoc ::ts (t/tag :init (range 3))))
+    (->> (input :init)
+         (output :stdout))
+    assoc ::ts (tag :init (range 3))))
 
 (def ex3
   (vary-meta
-    (->> (n/input :init)
-         (n/node (map :argv))
-         (n/output :stdout)
-         n/net)
-    assoc ::ts (t/tag :init [{:argv ["ls" "-l"]}])))
+    (->> (input :init)
+         (node (map :argv))
+         (output :stdout))
+    assoc ::ts (tag :init [{:argv ["ls" "-l"]}])))
 
 (def ex4
   (vary-meta
-    (->> (n/input ::ch)
-         (n/node (map #(str "Hello " %)))
-         (n/output :stdout)
-         n/net)
-    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
+    (->> (input ::ch)
+         (node (map #(str "Hello " %)))
+         (output :stdout))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex5
   (vary-meta
-    (->> (n/input :init)
-         (n/node (map #(-> % :env (get "USER"))))
-         (n/node (map #(str "Hello " %)))
-         (n/output :stdout)
-         n/net)
-    assoc ::ts (t/tag :init [{:argv ["ls" "-l"]
-                              :env (System/getenv)}])))
+    (->> (input :init)
+         (node (map #(-> % :env (get "USER"))))
+         (node (map #(str "Hello " %)))
+         (output :stdout))
+    assoc ::ts (tag :init [{:argv ["ls" "-l"]
+                            :env (System/getenv)}])))
 
 (def ex6
   (vary-meta
-    (->> (n/input ::ch)
-         (n/node (take 2))
-         (n/node (map #(str "Hello " %)))
-         (n/output :stdout)
-         n/net)
-    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
+    (->> (input ::ch)
+         (node (take 2))
+         (node (map #(str "Hello " %)))
+         (output :stdout))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex7
   (vary-meta
-    (let [{i ::ch} n/inputs
-          a (n/node (map #(str "Hello " %)) i)
-          b (n/node (map #(str "Goodbye " %)) i)
-          o (n/outputs {:stdout #{a b}})]
-      (n/net o))
-    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
+    (let [{i ::ch} inputs
+          a (node (map #(str "Hello " %)) i)
+          b (node (map #(str "Goodbye " %)) i)]
+      (outputs {:stdout #{a b}}))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex8
   (vary-meta
-    (let [{i ::ch} n/inputs
-          a (n/node (map #(str "Goodbye " %)) i)
-          b (n/node (take 2) i)
-          c (n/node (map #(str "Hello " %)) b)
-          o (n/outputs {:stdout #{a c}})]
-      (n/net o))
-    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
+    (let [{i ::ch} inputs
+          a (node (map #(str "Goodbye " %)) i)
+          b (node (take 2) i)
+          c (node (map #(str "Hello " %)) b)]
+      (outputs {:stdout #{a c}}))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex9
   (vary-meta
-    (let [{i ::ch} n/inputs
-          a (n/node (map #(str "Goodbye " %)) i)
-          {c :stdout} (ex6 {::ch i})
-          o (n/outputs {:stdout #{a c}})]
-      (n/net o))
-    assoc ::ts (t/tag ::ch ["bob" "jim" "joe"])))
+    (let [{i ::ch} inputs
+          a (node (map #(str "Goodbye " %)) i)
+          {c :stdout} (embed ex6 {::ch i})]
+      (outputs {:stdout #{a c}}))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+
+(def ex10
+  (vary-meta
+    (let [{ch ::ch} inputs
+          b (node (take 2) ch)
+          c (node (map #(str "Hello " %)) b)
+          d (node (map #(str "Goodbye " %)) ch)
+          e (node (map #(str % "!")) #{c d})]
+      (outputs {:stdout #{d e}}))
+    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+
+(def ex11
+  (vary-meta
+    (let [{a ::ch1
+           b ::ch2} inputs
+          c (node (take 2) #{a b})]
+      (outputs {:stdout c}))
+    assoc ::ts (interleave
+                 (tag ::ch1 ["bob" "jim" "joe"])
+                 (tag ::ch2 ["sue" "kim" "meg"]))))
+
+(def ex12
+  (vary-meta
+    (let [{a ::ch1} inputs
+          b (node identity a)]
+      (outputs {:stdout #{a b}}))
+    assoc ::ts (tag ::ch1 ["bob" "jim" "joe"])))
+
+(def ex13
+  (vary-meta
+    (let [{a :stdin} inputs
+          b (node (map #(str % "-b")) a)
+          c (node (map #(str % "-c")) #{a b})]
+       (outputs {:stdout #{a c}}))
+    assoc ::ts (tag :stdin ["bob" "jim" "joe"])))
+
+(def ex14
+  (vary-meta
+    (let [{c1 ::ch1
+           c2 ::ch2} inputs
+          n1 (node (map #(str % "-n1")) c1)
+          n2 (node (map #(str % "-n2")) c2)
+          n3 (node (map #(str % "-n3")) n1)
+          n4 (node (comp (map #(str % "-n4")) (take 2)) #{n1 n2})]
+      (outputs {:stdout #{n3 n4}}))
+    assoc ::ts (interleave
+                 (tag ::ch1 ["bob" "jim" "joe"])
+                 (tag ::ch2 ["sue" "kim" "meg"]))))
 
 (comment
-
-  (def ex10
-    (net {input ::ch}
-         b (node input (take 2))
-         c (node b (map #(str "Hello " %)))
-         d (node input (map #(str "Goodbye " %)))
-         e (node #{c d} (map #(str % "!")))
-         {:stdout #{d e}}))
-
-  (def ex11
-    (net {a ::ch1
-          b ::ch2}
-         c (node #{a b} (take 2))
-         {:stdout c}))
-
-  (def ex12
-    (net {a ::ch1}
-         b (node a identity)
-         {:stdout #{a b}}))
-
-  (def ex13
-    (net {a :stdin}
-         b (node a (map #(str % "-b")) 'b)
-         c (node #{a b} (map #(str % "-c")) 'c)
-         {:stdout #{a c}}))
-
-  (def ex14
-    (net {c1 ::ch1
-          c2 ::ch2}
-         n1 (node c1 (map #(str % "-n1")))
-         n2 (node c2 (map #(str % "-n2")))
-         n3 (node n1 (map #(str % "-n3")))
-         n4 (node #{n1 n2} (comp (map #(str % "-n4")) (take 2)))
-         {:stdout #{n3 n4}}))
-
   (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
 
   (def dir-cmd-xf
