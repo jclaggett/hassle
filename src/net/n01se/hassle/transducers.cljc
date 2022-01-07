@@ -140,9 +140,9 @@
 (defn get-input-trees [input-xfs]
   (let [input-trees (->> input-xfs
                          n/get-input-trees
-                         (map #(let [net-tree (-> % meta ::net-tree)]
-                                 (assert (not (nil? net-tree))
-                                         (str "Error: bad input value: '" % "'. Must `input` or `node` net transducer."))
+                         (map #(let [{::keys [net-type net-tree]} (meta %)]
+                                 (assert (#{:inputs :nodes} net-type)
+                                         (str "Error: bad input value: '" % "'. Must specify `input` or `node` net transducer."))
                                  net-tree)))]
     (assert (not (empty? input-trees)) "Error: Must specify at least one `input` or `node` net transducer.")
     (set input-trees)))
@@ -178,15 +178,16 @@
 (defn embed
   ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))
   ([xf input-xf-map]
-   (-> xf
-       meta
-       ::net-tree
-       n/make-net-map
-       (n/postwalk-net-map
-         :outputs
-         (fn [{xf :xf} [node-type node-id] input-xfs]
-           (condp = node-type
-             :inputs (input-xf-map node-id)
-             :nodes (node xf (set input-xfs))
-             :outputs (set input-xfs))))
-       :outputs)))
+   (let [{::keys [net-type net-tree]} (meta xf)]
+     (assert (#{:outputs} net-type)
+             (str "Error: bad embed value: '" xf "'. Must specify `output` net transducer."))
+     (-> net-tree
+         n/make-net-map
+         (n/postwalk-net-map
+           :outputs
+           (fn [{xf :xf} [node-type node-id] input-xfs]
+             (condp = node-type
+               :inputs (input-xf-map node-id)
+               :nodes (node xf (set input-xfs))
+               :outputs (set input-xfs))))
+         :outputs))))
