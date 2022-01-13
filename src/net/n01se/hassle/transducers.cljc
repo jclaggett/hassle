@@ -137,24 +137,23 @@
       ((-> net-tree n/make-net-map netduce) rf))
     assoc ::net-type net-type ::net-tree net-tree))
 
+(defn get-trees [xfs xf-types]
+  (let [trees (->> xfs
+                   n/get-input-trees
+                   (map #(let [{::keys [net-type net-tree]} (meta %)]
+                           (assert (xf-types net-type)
+                                   (str "Error: bad input value: '" % "'. Must specify net-transducers of the type(s): " xf-types))
+                           net-tree)))]
+    (assert (not (empty? trees)) "Error: Must specify at least one net transducer.")
+    (set trees)))
+
 (defn get-input-trees [input-xfs]
-  (let [input-trees (->> input-xfs
-                         n/get-input-trees
-                         (map #(let [{::keys [net-type net-tree]} (meta %)]
-                                 (assert (#{:inputs :nodes} net-type)
-                                         (str "Error: bad input value: '" % "'. Must specify `input` or `node` net transducer."))
-                                 net-tree)))]
-    (assert (not (empty? input-trees)) "Error: Must specify at least one `input` or `node` net transducer.")
-    (set input-trees)))
+  (get-trees input-xfs #{:inputs :nodes}))
 
 ;; Newest, take on an API. Take 5?
 (defn input
   ([k xs] (sequence (input k) xs))
   ([k] (net-transducer :inputs (n/input k))))
-
-(def inputs
-  (reify clojure.lang.IPersistentSet
-    (get [_ v] (input v))))
 
 (defn node
   ([xf input-xfs xs] (sequence (node xf input-xfs) xs))
@@ -162,18 +161,17 @@
    (let [input-trees (get-input-trees input-xfs)]
      (net-transducer :nodes (n/node xf input-trees)))))
 
-(defn outputs
-  ([input-xf-map xs] (sequence (outputs input-xf-map) xs))
-  ([input-xf-map]
-   (let [input-tree-map (->> input-xf-map
-                             (map (fn [[k v]] [k (get-input-trees v)]))
-                             (into {}))]
-     (net-transducer :outputs (n/outputs input-tree-map)))))
-
 (defn output
   ([k input-xfs xs] (sequence (output k input-xfs) xs))
   ([k input-xfs]
-   (outputs {k input-xfs})))
+   (let [input-trees (get-input-trees input-xfs)]
+     (net-transducer :outputs (n/output k input-trees)))))
+
+(defn net
+  ([xfs xs] (sequence (net xfs) xs))
+  ([xfs]
+   (let [trees (get-trees xfs #{:inputs :nodes :outputs})]
+     (net-transducer :outputs trees))))
 
 (defn embed
   ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))

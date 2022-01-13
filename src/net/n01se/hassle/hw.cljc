@@ -2,7 +2,7 @@
   (:require [clojure.pprint :refer [pprint]]
 
             [net.n01se.hassle.transducers
-             :refer [tag input inputs node output outputs embed]]))
+             :refer [net tag input node output embed]]))
 
 (defn run-ex [xf]
   (sequence xf (-> xf meta ::ts)))
@@ -51,54 +51,54 @@
 
 (def ex7
   (vary-meta
-    (let [{i ::ch} inputs
+    (let [i (input ::ch)
           a (node (map #(str "Hello " %)) i)
           b (node (map #(str "Goodbye " %)) i)]
-      (outputs {:stdout #{a b}}))
+      (output :stdout #{a b}))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex8
   (vary-meta
-    (let [{i ::ch} inputs
+    (let [i (input ::ch)
           a (node (map #(str "Goodbye " %)) i)
           b (node (take 2) i)
           c (node (map #(str "Hello " %)) b)]
-      (outputs {:stdout #{a c}}))
+      (output :stdout #{a c}))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex9
   (vary-meta
-    (let [{i ::ch} inputs
+    (let [i (input ::ch)
           a (node (map #(str "Goodbye " %)) i)
           {c :stdout} (embed ex6 {::ch i})]
-      (outputs {:stdout #{a c}}))
+      (output :stdout #{a c}))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex10
   (vary-meta
-    (let [{ch ::ch} inputs
+    (let [ch (input ::ch)
           b (node (take 2) ch)
           c (node (map #(str "Hello " %)) b)
           d (node (map #(str "Goodbye " %)) ch)
           e (node (map #(str % "!")) #{c d})]
-      (outputs {:stdout #{d e}}))
+      (output :stdout #{d e}))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex11
   (vary-meta
-    (let [{a ::ch1
-           b ::ch2} inputs
+    (let [a (input ::ch1)
+          b (input ::ch2)
           c (node (take 2) #{a b})]
-      (outputs {:stdout c}))
+      (output :stdout c))
     assoc ::ts (interleave
                  (tag ::ch1 ["bob" "jim" "joe"])
                  (tag ::ch2 ["sue" "kim" "meg"]))))
 
 (def ex12
   (vary-meta
-    (let [{a ::ch1} inputs
+    (let [a (input ::ch1)
           b (node identity a)]
-      (outputs {:stdout #{a b}}))
+      (output :stdout #{a b}))
     assoc ::ts (tag ::ch1 ["bob" "jim" "joe"])))
 
 (defn suffix
@@ -108,24 +108,34 @@
 
 (def ex13
   (vary-meta
-    (let [{a :stdin} inputs
+    (let [a (input :stdin)
           b (suffix "-b" a)
-          c (suffix "-c" #{a b})]
-       (outputs {:stdout #{a c}}))
+          c (suffix "-c" #{a b})
+          d (output :stdout #{a c})
+          e (output :stderr b)]
+      (net #{d e}))
     assoc ::ts (tag :stdin ["bob" "jim" "joe"])))
 
 (def ex14
   (vary-meta
-    (let [{c1 ::ch1
-           c2 ::ch2} inputs
+    (let [c1 (input ::ch1)
+          c2 (input ::ch2)
           n1 (suffix "-n1" c1)
           n2 (suffix "-n2" c2)
           n3 (suffix "-n3" n1)
           n4 (node (comp (suffix "-n4") (take 2)) #{n1 n2})]
-      (outputs {:stdout #{n3 n4}}))
+      (output :stdout #{n3 n4}))
     assoc ::ts (interleave
                  (tag ::ch1 ["bob" "jim" "joe"])
                  (tag ::ch2 ["sue" "kim" "meg"]))))
+
+#_
+(def ex15
+  (let [in1 (input :a)
+        in2 (input :b)
+        {in1a :out} (embed ex14 {:primary in1 :secondary in2})
+        out (output :out in1a)]
+    out))
 
 (comment
   (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
