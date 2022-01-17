@@ -189,3 +189,45 @@
                :nodes (node xf (set input-xfs))
                :outputs (set input-xfs))))
          :outputs))))
+
+;; Building upwards from the above primitives
+
+(defn gate [input-modes]
+  (fn transducer [rf]
+    (let [*active-inputs (volatile! (set
+                                      (keep-indexed #(when (= %2 :active) %1)
+                                                    input-modes)))
+          *received-inputs (volatile! #{})
+          *input-values (volatile! (vec (repeat (count input-modes) nil)))]
+      (if (empty? @*active-inputs)
+        ;; if there are no active inputs ever, this transducer is trivial.
+        (reducer
+          (init [] (init rf))
+          (step [a v] (reduced a))
+          (fini [a] (fini rf a)))
+        (reducer
+          (init [] (init rf))
+          (step [a [i v :as couple]]
+                (if (= (count couple) 1) ;; i.e. this stream is ending
+                  (let [active-inputs (vswap! *active-inputs disj i)
+                        received-inputs @*received-inputs]
+                    (if (or (empty? active-inputs)
+                            (and (< (count received-inputs) (count input-modes))
+                                 (not (contains? received-inputs i))))
+                      (reduced a)
+                      a))
+                  (let [received-inputs (vswap! *received-inputs conj i)
+                        input-values (vswap! *input-values assoc i v)]
+                    (if (and (= (count received-inputs) (count input-modes))
+                             (= (nth input-modes i) :active))
+                      (step rf a input-values)
+                      a))))
+          (fini [a] (fini rf a)))))))
+
+(defn join [& inputs]
+  (let [modes (map first inputs)
+        inputs (map second inputs)]
+    (->> inputs
+         (map-indexed (fn [i input] (node (tag i) input)))
+         set
+         (node (gate modes)))))
