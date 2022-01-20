@@ -198,7 +198,7 @@
 (defn gate [input-modes]
   (fn transducer [rf]
     (let [*active-inputs (volatile! (set
-                                      (keep-indexed #(when (= %2 :active) %1)
+                                      (keep-indexed #(when %2 %1)
                                                     input-modes)))
           *received-inputs (volatile! #{})
           *input-values (volatile! (vec (repeat (count input-modes) nil)))]
@@ -222,18 +222,21 @@
                   (let [received-inputs (vswap! *received-inputs conj i)
                         input-values (vswap! *input-values assoc i v)]
                     (if (and (= (count received-inputs) (count input-modes))
-                             (= (nth input-modes i) :active))
+                             (nth input-modes i))
                       (step rf a input-values)
                       a))))
           (fini [a] (fini rf a)))))))
 
+(defn passively [x]
+  (vary-meta x assoc ::passive true))
+
 (defn join [& inputs]
-  (let [modes (map first inputs)
-        inputs (map second inputs)]
+  (let [input-modes (map #(-> % meta (::passive false) not) inputs)]
+    (pprint {:join input-modes})
     (->> inputs
          (map-indexed (fn [i input] (node (tag i) input)))
          set
-         (node (gate modes)))))
+         (node (gate input-modes)))))
 
 (defn pr-net [xfs]
   (-> xfs
