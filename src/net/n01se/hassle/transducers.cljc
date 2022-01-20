@@ -137,20 +137,29 @@
       ((-> net-tree n/make-net-map netduce) rf))
     assoc ::net-type net-type ::net-tree net-tree))
 
-(defn get-trees [xfs xf-types]
-  (let [trees (->> xfs
-                   n/get-input-trees
-                   (map #(let [{::keys [net-type net-tree]} (meta %)]
-                           (assert (xf-types net-type)
-                                   (str "Error: bad input value: '" % "'. Must specify net-transducers of the type(s): " xf-types))
-                           net-tree)))]
-    (assert (not (empty? trees)) "Error: Must specify at least one net transducer.")
-    (set trees)))
+(defn get-trees [xfs]
+  (->> xfs
+       n/get-input-trees
+       (map (comp ::net-tree meta))
+       set))
 
-(defn get-input-trees [input-xfs]
-  (get-trees input-xfs #{:inputs :nodes}))
+(defn get-input-trees [xfs]
+  (assert (->> xfs
+               n/get-input-trees
+               (map (comp ::net-type meta))
+               (every? #{:inputs :nodes}))
+          (str "Error: bad input value: '" xfs "'. "
+               "Must specify net-transducers of the type(s): "
+               #{:inputs :nodes}))
+  (get-trees xfs))
 
 ;; Newest, take on an API. Take 5?
+(defn net
+  ([xfs xs] (sequence (net xfs) xs))
+  ([xfs]
+   (let [trees (get-trees xfs)]
+     (net-transducer :outputs trees))))
+
 (defn input
   ([k xs] (sequence (input k) xs))
   ([k] (net-transducer :inputs (n/input k))))
@@ -166,12 +175,6 @@
   ([k input-xfs]
    (let [input-trees (get-input-trees input-xfs)]
      (net-transducer :outputs (n/output k input-trees)))))
-
-(defn net
-  ([xfs xs] (sequence (net xfs) xs))
-  ([xfs]
-   (let [trees (get-trees xfs #{:inputs :nodes :outputs})]
-     (net-transducer :outputs trees))))
 
 (defn embed
   ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))
@@ -231,3 +234,9 @@
          (map-indexed (fn [i input] (node (tag i) input)))
          set
          (node (gate modes)))))
+
+(defn pr-net [xfs]
+  (-> xfs
+      get-trees
+      n/make-net-map
+      n/compact-net-map))

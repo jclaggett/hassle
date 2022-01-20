@@ -11,7 +11,9 @@
 (defn get-input-trees [x]
   (if (set? x)
     (mapcat get-input-trees x)
-    (list x)))
+    (if (nil? x)
+      (list)
+      (list x))))
 
 (defn make-net-map
   [trees]
@@ -67,16 +69,16 @@
 
 (defn compact-net-map [net-map]
   (letfn [(compact-paths [paths] (map second paths))]
-    (postwalk-net-map
-      net-map
-      :inputs
-      (fn [node [node-type] _]
-        (condp = node-type
-          :inputs (-> node :outputs compact-paths)
-          :nodes (-> node
-                     (update :inputs compact-paths)
-                     (update :outputs compact-paths))
-          :outputs (-> node :inputs compact-paths))))))
+    (concat
+      (map (fn [[k {:keys [outputs]}]]
+             [k :outputs (compact-paths outputs)])
+           (:inputs net-map))
+      (map (fn [[k {:keys [outputs inputs]}]]
+             [k :outputs (compact-paths outputs) :inputs (compact-paths inputs)])
+           (:nodes net-map))
+      (map (fn [[k {:keys [inputs]}]]
+             [k :inputs (compact-paths inputs)])
+           (:outputs net-map)))))
 
 (declare node)
 (defn make-embed-fn [net-map]
