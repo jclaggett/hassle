@@ -195,37 +195,39 @@
 
 ;; Building upwards from the above primitives
 
-(defn gate [input-modes]
-  (fn transducer [rf]
-    (let [*active-inputs (volatile! (set
-                                      (keep-indexed #(when %2 %1)
-                                                    input-modes)))
-          *received-inputs (volatile! #{})
-          *input-values (volatile! (vec (repeat (count input-modes) nil)))]
-      (if (empty? @*active-inputs)
-        ;; if there are no active inputs ever, this transducer is trivial.
-        (reducer
-          (init [] (init rf))
-          (step [a v] (reduced a))
-          (fini [a] (fini rf a)))
-        (reducer
-          (init [] (init rf))
-          (step [a [i v :as couple]]
-                (if (= (count couple) 1) ;; i.e. this stream is ending
-                  (let [active-inputs (vswap! *active-inputs disj i)
-                        received-inputs @*received-inputs]
-                    (if (or (empty? active-inputs)
-                            (and (< (count received-inputs) (count input-modes))
-                                 (not (contains? received-inputs i))))
-                      (reduced a)
-                      a))
-                  (let [received-inputs (vswap! *received-inputs conj i)
-                        input-values (vswap! *input-values assoc i v)]
-                    (if (and (= (count received-inputs) (count input-modes))
-                             (nth input-modes i))
-                      (step rf a input-values)
-                      a))))
-          (fini [a] (fini rf a)))))))
+(defn gate
+  ([input-modes xs] (sequence (gate input-modes) xs))
+  ([input-modes]
+   (fn transducer [rf]
+     (let [*active-inputs (volatile! (set
+                                       (keep-indexed #(when %2 %1)
+                                                     input-modes)))
+           *received-inputs (volatile! #{})
+           *input-values (volatile! (vec (repeat (count input-modes) nil)))]
+       (if (empty? @*active-inputs)
+         ;; if there are no active inputs ever, this transducer is trivial.
+         (reducer
+           (init [] (init rf))
+           (step [a v] (reduced a))
+           (fini [a] (fini rf a)))
+         (reducer
+           (init [] (init rf))
+           (step [a [i v :as couple]]
+                 (if (= (count couple) 1) ;; i.e. this stream is ending
+                   (let [active-inputs (vswap! *active-inputs disj i)
+                         received-inputs @*received-inputs]
+                     (if (or (empty? active-inputs)
+                             (and (< (count received-inputs) (count input-modes))
+                                  (not (contains? received-inputs i))))
+                       (reduced a)
+                       a))
+                   (let [received-inputs (vswap! *received-inputs conj i)
+                         input-values (vswap! *input-values assoc i v)]
+                     (if (and (= (count received-inputs) (count input-modes))
+                              (nth input-modes i))
+                       (step rf a input-values)
+                       a))))
+           (fini [a] (fini rf a))))))))
 
 (defn passively [x]
   (vary-meta x assoc ::passive true))
