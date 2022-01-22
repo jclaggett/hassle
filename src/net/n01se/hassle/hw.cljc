@@ -141,13 +141,18 @@
                  (tag ::ch1 ["bob" "jim" "joe"])
                  (tag ::ch2 ["sue" "kim" "meg"]))))
 
-#_
 (def ex15
-  (let [in1 (input :a)
-        in2 (input :b)
-        {in1a :out} (embed ex14 {:primary in1 :secondary in2})
-        out (output :out in1a)]
-    out))
+  (vary-meta
+    (let [c1 (input ::ch1)
+          c2 (input ::ch2)
+          n1 (join c1 c2)
+          n2 (join c1 (passive c2))
+          o1 (output :out1 n1)
+          o2 (output :out2 n2)]
+      (net #{o1 o2}))
+    assoc ::ts (interleave
+                 (tag ::ch1 ["bob" "jim" "joe"])
+                 (tag ::ch2 ["sue" "kim" "meg"]))))
 
 (comment
   (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")

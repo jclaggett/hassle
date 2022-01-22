@@ -96,12 +96,12 @@
 
 (defn match-tags
   ([xf-map xs] (sequence (match-tags xf-map) xs))
-  ([xf-map] (multiplex (map (fn [[k xf]]
-                              (comp (filter #(and (sequential? %)
-                                                  (<= 1 (count %) 2)))
-                                    (detag k)
-                                    xf))
-                            xf-map))))
+  ([xf-map] (t/multiplex (map (fn [[k xf]]
+                                (comp (filter #(and (sequential? %)
+                                                    (<= 1 (count %) 2)))
+                                      (detag k)
+                                      xf))
+                              xf-map))))
 
 (defn transduce-net
   ([net-map xs] (sequence (transduce-net net-map) xs))
