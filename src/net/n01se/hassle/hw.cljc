@@ -1,35 +1,38 @@
 (ns net.n01se.hassle.hw
   (:require [clojure.pprint :refer [pprint]]
 
-            [net.n01se.hassle.transducers
-             :refer [net tag input node output embed]]))
+            [net.n01se.hassle.net
+             :refer [net tag input node output embed join passive]]))
 
 (defn run-ex [xf]
   (sequence xf (-> xf meta ::ts)))
 
 (def ex1
   (vary-meta
-    (input :foo)
+    (net (input :foo))
     assoc ::ts (tag :foo (range 3))))
 
 (def ex2
   (vary-meta
     (->> (input :init)
-         (output :stdout))
+         (output :stdout)
+         net)
     assoc ::ts (tag :init (range 3))))
 
 (def ex3
   (vary-meta
     (->> (input :init)
          (node (map :argv))
-         (output :stdout))
+         (output :stdout)
+         net)
     assoc ::ts (tag :init [{:argv ["ls" "-l"]}])))
 
 (def ex4
   (vary-meta
     (->> (input ::ch)
          (node (map #(str "Hello " %)))
-         (output :stdout))
+         (output :stdout)
+         net)
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex5
@@ -37,7 +40,8 @@
     (->> (input :init)
          (node (map #(-> % :env (get "USER"))))
          (node (map #(str "Hello " %)))
-         (output :stdout))
+         (output :stdout)
+         net)
     assoc ::ts (tag :init [{:argv ["ls" "-l"]
                             :env (System/getenv)}])))
 
@@ -46,15 +50,17 @@
     (->> (input ::ch)
          (node (take 2))
          (node (map #(str "Hello " %)))
-         (output :stdout))
+         (output :stdout)
+         net)
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex7
   (vary-meta
     (let [i (input ::ch)
           a (node (map #(str "Hello " %)) i)
-          b (node (map #(str "Goodbye " %)) i)]
-      (output :stdout #{a b}))
+          b (node (map #(str "Goodbye " %)) i)
+          o (output :stdout #{a b})]
+      (net o))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex8
@@ -62,16 +68,18 @@
     (let [i (input ::ch)
           a (node (map #(str "Goodbye " %)) i)
           b (node (take 2) i)
-          c (node (map #(str "Hello " %)) b)]
-      (output :stdout #{a c}))
+          c (node (map #(str "Hello " %)) b)
+          o (output :stdout #{a c})]
+      (net o))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex9
   (vary-meta
     (let [i (input ::ch)
           a (node (map #(str "Goodbye " %)) i)
-          {c :stdout} (embed ex6 {::ch i})]
-      (output :stdout #{a c}))
+          {c :stdout} (embed ex6 {::ch i})
+          o (output :stdout #{a c})]
+      (net o))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex10
@@ -80,16 +88,18 @@
           b (node (take 2) ch)
           c (node (map #(str "Hello " %)) b)
           d (node (map #(str "Goodbye " %)) ch)
-          e (node (map #(str % "!")) #{c d})]
-      (output :stdout #{d e}))
+          e (node (map #(str % "!")) #{c d})
+          o (output :stdout #{d e})]
+      (net o))
     assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
 
 (def ex11
   (vary-meta
     (let [a (input ::ch1)
           b (input ::ch2)
-          c (node (take 2) #{a b})]
-      (output :stdout c))
+          c (node (take 2) #{a b})
+          o (output :stdout c)]
+      (net o))
     assoc ::ts (interleave
                  (tag ::ch1 ["bob" "jim" "joe"])
                  (tag ::ch2 ["sue" "kim" "meg"]))))
@@ -97,8 +107,9 @@
 (def ex12
   (vary-meta
     (let [a (input ::ch1)
-          b (node identity a)]
-      (output :stdout #{a b}))
+          b (node identity a)
+          o (output :stdout #{a b})]
+      (net o))
     assoc ::ts (tag ::ch1 ["bob" "jim" "joe"])))
 
 (defn suffix
@@ -123,8 +134,9 @@
           n1 (suffix "-n1" c1)
           n2 (suffix "-n2" c2)
           n3 (suffix "-n3" n1)
-          n4 (node (comp (suffix "-n4") (take 2)) #{n1 n2})]
-      (output :stdout #{n3 n4}))
+          n4 (node (comp (suffix "-n4") (take 2)) #{n1 n2})
+          o1 (output :stdout #{n3 n4})]
+      (net o1))
     assoc ::ts (interleave
                  (tag ::ch1 ["bob" "jim" "joe"])
                  (tag ::ch2 ["sue" "kim" "meg"]))))

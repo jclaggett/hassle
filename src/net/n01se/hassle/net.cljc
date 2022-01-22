@@ -1,47 +1,44 @@
 (ns net.n01se.hassle.net
-  (:require [clojure.pprint :refer [pprint]]))
+  (:require [clojure.pprint :refer [pprint]]
+
+            [net.n01se.hassle.transducers :as t]))
 
 (defn debug
   ([x] (debug x x))
   ([msg x] (println "DEBUG:" msg) x))
 
 ;; implementation
-(def conj-set (fnil conj #{}))
 
-(defn get-input-trees [x]
-  (if (set? x)
-    (mapcat get-input-trees x)
-    (if (nil? x)
+(defn normalize-trees [trees]
+  (if (set? trees)
+    (mapcat normalize-trees trees)
+    (if (nil? trees)
       (list)
-      (list x))))
+      (list trees))))
 
 (defn make-net-map
   [trees]
-  (letfn [(make-nodes [net-map trees super-path]
+  (letfn [(walk-trees [net-map trees super-path]
             (reduce
-              (fn [net-map [tree-type args sub-trees id label :as tree]]
-                (condp = tree-type
-                  :input (if (nil? super-path)
-                           (assoc-in net-map [:inputs args :outputs] #{})
-                           (-> net-map
-                               (update-in [:inputs args :outputs]
-                                          conj-set super-path)
-                               (update-in (conj super-path :inputs)
-                                          conj-set [:inputs args])))
-                  :node (if (nil? super-path)
-                          (-> net-map
-                              (assoc-in [:nodes id :xf] args)
-                              (make-nodes sub-trees [:nodes id]))
-                          (-> net-map
-                              (assoc-in [:nodes id :xf] args)
-                              (update-in [:nodes id :outputs] conj-set super-path)
-                              (update-in (conj super-path :inputs) conj-set [:nodes id])
-                              (make-nodes sub-trees [:nodes id])))
-                  :output (-> net-map
-                              (make-nodes sub-trees [:outputs args]))))
+              (fn [net-map [tree-type args sub-trees id :as tree]]
+                (let [[node-path node-value]
+                      (condp = tree-type
+                        :input [[:inputs args] {:outputs #{}}]
+                        :node [[:nodes id] {:xf args :inputs #{} :outputs #{}}]
+                        :output [[:outputs args] {:inputs #{}}])]
+                  (cond-> net-map
+                    (nil? (get-in net-map node-path))
+                    (assoc-in node-path node-value)
+
+                    (not (or (= tree-type :output) (nil? super-path)))
+                    (-> (update-in (conj node-path :outputs) conj super-path)
+                        (update-in (conj super-path :inputs) conj node-path))
+
+                    true
+                    (walk-trees sub-trees node-path))))
               net-map
-              (get-input-trees trees)))]
-    (make-nodes {} trees nil)))
+              (normalize-trees trees)))]
+    (walk-trees {} trees nil)))
 
 (defn postwalk-net-map [orig-net-map root update-fn]
   (let [kids (case root :inputs :outputs :outputs :inputs :none)]
@@ -80,36 +77,100 @@
              [k :inputs (compact-paths inputs)])
            (:outputs net-map)))))
 
-(declare node)
-(defn make-embed-fn [net-map]
-  (vary-meta
-    (fn embedder [input-map]
-      (:outputs
-        (postwalk-net-map
-          net-map
-          :outputs
-          (fn [{xf :xf} [node-type node-id] inputs]
-            (condp = node-type
-              :inputs (input-map node-id)
-              :nodes (node xf (set inputs))
-              :outputs (set inputs))))))
-    assoc ::net-map net-map))
+(defn assert-no-outputs [inputs]
+  (assert (->> inputs normalize-trees (map first) (every? #{:input :node}))
+          "Output nodes are not allowed as inputs")
+  inputs)
 
-(defn net [tree]
-  (make-embed-fn (make-net-map tree)))
+;; Attempt 6? 7? at API
+(defn tag
+  ([k xs] (sequence (tag k) xs))
+  ([k] (comp (map (fn [x] [k x]))
+             (t/final [k]))))
 
-;; Latest attempt at a decent API
-(defn input [v] (list :input v #{} (gensym 'i)))
-(def inputs (reify clojure.lang.IPersistentSet
-              (get [_ v] (input v))))
+(defn detag
+  ([k xs] (sequence (detag k) xs))
+  ([k] (comp (filter #(= (first %) k))
+             (take-while #(= (count %) 2))
+             (map second))))
 
-(defn output [k v] (list :output k v (gensym 'o)))
-(defn outputs [m] (set (map (fn [[k v]] (output k v)) m)))
+(defn match-tags
+  ([xf-map xs] (sequence (match-tags xf-map) xs))
+  ([xf-map] (multiplex (map (fn [[k xf]]
+                              (comp (filter #(and (sequential? %)
+                                                  (<= 1 (count %) 2)))
+                                    (detag k)
+                                    xf))
+                            xf-map))))
 
-(defn node
-  ([xf] (net (output :out (node xf (input :in)))))
-  ([xf in] (list :node xf in (gensym 'n))))
+(defn transduce-net
+  ([net-map xs] (sequence (transduce-net net-map) xs))
+  ([net-map]
+   (-> net-map
+       (postwalk-net-map
+         :inputs
+         (fn [{:keys [xf inputs outputs]} [node-type node-id] output-xfs]
+           (let [output-xfs' (if (empty? output-xfs) [identity] output-xfs)
+                 multiplex' (if (= (count output-xfs') 1) first t/multiplex)
+                 demultiplex' (if (= (count inputs) 1) identity t/demultiplex)]
+             (condp = node-type
+               :inputs (multiplex' output-xfs')
+               :nodes (demultiplex' (comp xf (multiplex' output-xfs')))
+               :outputs (demultiplex' (tag node-id))))))
+       :inputs
+       match-tags)))
 
-(defn pr-net [f]
-  (doto (-> f meta ::net-map compact-net-map)
-    pprint))
+(defn net
+  ([net-tree xs] (sequence (net net-tree) xs))
+  ([net-tree]
+   (let [net-map (make-net-map net-tree)
+         net-xf (transduce-net net-map)]
+     (fn transducer
+       ([] net-map)
+       ([rf] (net-xf rf))))))
+
+(defn input [k] (list :input k #{} (gensym 'i)))
+(defn node [xf inputs] (list :node xf (assert-no-outputs inputs) (gensym 'n)))
+(defn output [k inputs] (list :output k (assert-no-outputs inputs) (gensym 'o)))
+
+(defn embed [net-xf input-map]
+  (-> (net-xf)
+      (postwalk-net-map
+        :outputs
+        (fn [{xf :xf} [node-type node-id] input-xfs]
+          (condp = node-type
+            :inputs (input-map node-id)
+            :nodes (node xf (set input-xfs))
+            :outputs (set input-xfs))))
+      :outputs))
+
+(defrecord Passive [x]
+  clojure.lang.IDeref
+  (deref [_] x))
+
+(defn passive? [x]
+  (instance? Passive x))
+
+(defn passive [x]
+  (if (passive? x)
+    x
+    (Passive. x)))
+
+(defn active? [x]
+  (not (passive? x)))
+
+(defn active [x]
+  (if (active? x)
+    x
+    (deref x)))
+
+(defn join [& inputs]
+  (let [input-modes (map active? inputs)]
+    (->> inputs
+         (map active)
+         (map-indexed (fn [i input] (node (tag i) input)))
+         set
+         (node (t/gate input-modes)))))
+
+(defn pr-net [net-xf]
+  (compact-net-map (net-xf)))

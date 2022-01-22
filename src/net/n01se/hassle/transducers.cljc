@@ -1,7 +1,5 @@
 (ns net.n01se.hassle.transducers
-  (:require [clojure.pprint :refer [pprint]]
-
-            [net.n01se.hassle.net :as n :refer [postwalk-net-map]]))
+  (:require [clojure.pprint :refer [pprint]]))
 
 (defmacro reducer
   [[init & init-body]
@@ -87,102 +85,6 @@
                                 a))))]
            (:rf (vswap! *cache assoc :rf rf''))))))))
 
-(defn tag
-  ([k xs] (sequence (tag k) xs))
-  ([k] (comp (map (fn [x] [k x]))
-             (final [k]))))
-
-(defn detag
-  ([k xs] (sequence (detag k) xs))
-  ([k] (comp (filter #(= (first %) k))
-             (take-while #(= (count %) 2))
-             (map second))))
-
-(defn match-tags
-  ([xf-map xs] (sequence (match-tags xf-map) xs))
-  ([xf-map] (multiplex (map (fn [[k xf]]
-                              (comp (filter #(and (sequential? %)
-                                                  (<= 1 (count %) 2)))
-                                    (detag k)
-                                    xf))
-                            xf-map))))
-
-(defn vary-rf-meta [xf & args]
-  (fn transducer [rf]
-    (apply vary-meta (xf rf) args)))
-
-(defn netduce
-  ([net-map xs] (sequence (netduce net-map) xs))
-  ([net-map]
-   (-> net-map
-       (postwalk-net-map
-         :inputs
-         (fn [{:keys [xf inputs outputs]} [node-type node-id] output-xfs]
-           (let [output-xfs' (if (empty? output-xfs) [identity] output-xfs)
-                 multiplex' (if (= (count output-xfs') 1) first multiplex)
-                 demultiplex' (if (= (count inputs) 1) identity demultiplex)]
-             (condp = node-type
-               :inputs (multiplex' output-xfs')
-               :nodes (demultiplex' (comp xf (multiplex' output-xfs')))
-               :outputs (demultiplex' (tag node-id))))))
-       :inputs
-       match-tags
-       (vary-meta assoc ::net net-map)
-       (vary-rf-meta assoc ::net net-map))))
-
-
-(defn net-transducer [net-tree]
-  (vary-meta
-    (fn transducer [rf]
-      ((-> net-tree n/make-net-map netduce) rf))
-    assoc ::net-tree net-tree))
-
-(defn get-trees [xfs]
-  (->> xfs
-       n/get-input-trees
-       (map (comp ::net-tree meta))
-       set))
-
-;; Newest, take on an API. Take 5?
-(defn net
-  ([xfs xs] (sequence (net xfs) xs))
-  ([xfs]
-   (let [trees (get-trees xfs)]
-     (net-transducer trees))))
-
-(defn input
-  ([k xs] (sequence (input k) xs))
-  ([k] (net-transducer (n/input k))))
-
-(defn node
-  ([xf input-xfs xs] (sequence (node xf input-xfs) xs))
-  ([xf input-xfs]
-   (let [input-trees (get-trees input-xfs)]
-     (net-transducer (n/node xf input-trees)))))
-
-(defn output
-  ([k input-xfs xs] (sequence (output k input-xfs) xs))
-  ([k input-xfs]
-   (let [input-trees (get-trees input-xfs)]
-     (net-transducer (n/output k input-trees)))))
-
-(defn embed
-  ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))
-  ([xf input-xf-map]
-   (let [{::keys [net-tree]} (meta xf)]
-     (-> net-tree
-         n/make-net-map
-         (n/postwalk-net-map
-           :outputs
-           (fn [{xf :xf} [node-type node-id] input-xfs]
-             (condp = node-type
-               :inputs (input-xf-map node-id)
-               :nodes (node xf (set input-xfs))
-               :outputs (set input-xfs))))
-         :outputs))))
-
-;; Building upwards from the above primitives
-
 (defn gate
   ([input-modes xs] (sequence (gate input-modes) xs))
   ([input-modes]
@@ -216,38 +118,3 @@
                        (step rf a input-values)
                        a))))
            (fini [a] (fini rf a))))))))
-
-(defrecord Passive [x]
-  clojure.lang.IDeref
-  (deref [_] x))
-
-(defn passive? [x]
-  (instance? Passive x))
-
-(defn passive [x]
-  (if (passive? x)
-    x
-    (Passive. x)))
-
-(defn active? [x]
-  (not (passive? x)))
-
-(defn active [x]
-  (if (active? x)
-    x
-    (deref x)))
-
-(defn join [& inputs]
-  (let [input-modes (map active? inputs)]
-    (pprint {:join input-modes})
-    (->> inputs
-         (map active)
-         (map-indexed (fn [i input] (node (tag i) input)))
-         set
-         (node (gate input-modes)))))
-
-(defn pr-net [xfs]
-  (-> xfs
-      get-trees
-      n/make-net-map
-      n/compact-net-map))
