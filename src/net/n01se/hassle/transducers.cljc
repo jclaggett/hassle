@@ -131,11 +131,11 @@
        (vary-rf-meta assoc ::net net-map))))
 
 
-(defn net-transducer [net-type net-tree]
+(defn net-transducer [net-tree]
   (vary-meta
     (fn transducer [rf]
       ((-> net-tree n/make-net-map netduce) rf))
-    assoc ::net-type net-type ::net-tree net-tree))
+    assoc ::net-tree net-tree))
 
 (defn get-trees [xfs]
   (->> xfs
@@ -143,45 +143,33 @@
        (map (comp ::net-tree meta))
        set))
 
-(defn get-input-trees [xfs]
-  (assert (->> xfs
-               n/get-input-trees
-               (map (comp ::net-type meta))
-               (every? #{:inputs :nodes}))
-          (str "Error: bad input value: '" xfs "'. "
-               "Must specify net-transducers of the type(s): "
-               #{:inputs :nodes}))
-  (get-trees xfs))
-
 ;; Newest, take on an API. Take 5?
 (defn net
   ([xfs xs] (sequence (net xfs) xs))
   ([xfs]
    (let [trees (get-trees xfs)]
-     (net-transducer :outputs trees))))
+     (net-transducer trees))))
 
 (defn input
   ([k xs] (sequence (input k) xs))
-  ([k] (net-transducer :inputs (n/input k))))
+  ([k] (net-transducer (n/input k))))
 
 (defn node
   ([xf input-xfs xs] (sequence (node xf input-xfs) xs))
   ([xf input-xfs]
-   (let [input-trees (get-input-trees input-xfs)]
-     (net-transducer :nodes (n/node xf input-trees)))))
+   (let [input-trees (get-trees input-xfs)]
+     (net-transducer (n/node xf input-trees)))))
 
 (defn output
   ([k input-xfs xs] (sequence (output k input-xfs) xs))
   ([k input-xfs]
-   (let [input-trees (get-input-trees input-xfs)]
-     (net-transducer :outputs (n/output k input-trees)))))
+   (let [input-trees (get-trees input-xfs)]
+     (net-transducer (n/output k input-trees)))))
 
 (defn embed
   ([xf input-xf-map xs] (sequence (embed xf input-xf-map) xs))
   ([xf input-xf-map]
-   (let [{::keys [net-type net-tree]} (meta xf)]
-     (assert (#{:outputs} net-type)
-             (str "Error: bad embed value: '" xf "'. Must specify `output` net transducer."))
+   (let [{::keys [net-tree]} (meta xf)]
      (-> net-tree
          n/make-net-map
          (n/postwalk-net-map
