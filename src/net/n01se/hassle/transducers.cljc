@@ -217,13 +217,31 @@
                        a))))
            (fini [a] (fini rf a))))))))
 
-(defn passively [x]
-  (vary-meta x assoc ::passive true))
+(defrecord Passive [x]
+  clojure.lang.IDeref
+  (deref [_] x))
+
+(defn passive? [x]
+  (instance? Passive x))
+
+(defn passive [x]
+  (if (passive? x)
+    x
+    (Passive. x)))
+
+(defn active? [x]
+  (not (passive? x)))
+
+(defn active [x]
+  (if (active? x)
+    x
+    (deref x)))
 
 (defn join [& inputs]
-  (let [input-modes (map #(-> % meta (::passive false) not) inputs)]
+  (let [input-modes (map active? inputs)]
     (pprint {:join input-modes})
     (->> inputs
+         (map active)
          (map-indexed (fn [i input] (node (tag i) input)))
          set
          (node (gate input-modes)))))
