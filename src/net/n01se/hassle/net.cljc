@@ -165,12 +165,13 @@
     (deref x)))
 
 (defn join [& inputs]
-  (let [input-modes (map active? inputs)]
-    (->> inputs
-         (map active)
-         (map-indexed (fn [i input] (node (tag i) input)))
-         set
-         (node (t/gate input-modes)))))
+  (node (->> inputs
+             (map active?)
+             t/gate)
+        (->> inputs
+             (map active)
+             (map-indexed #(node (tag %1) %2))
+             set)))
 
 (defn pr-net [net-xf]
   (compact-net-map (net-xf)))
