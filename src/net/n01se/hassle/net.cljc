@@ -20,19 +20,15 @@
   [trees]
   (letfn [(walk-trees [net-map trees super-path]
             (reduce
-              (fn [net-map [tree-type args sub-trees id :as tree]]
-                (let [[node-path node-value]
-                      (condp = tree-type
-                        :input [[:inputs args] {:outputs #{}}]
-                        :node [[:nodes id] {:xf args :inputs #{} :outputs #{}}]
-                        :output [[:outputs args] {:inputs #{}}])]
+              (fn [net-map [tree-type id sub-trees xf]]
+                (let [node-path [tree-type id]]
                   (cond-> net-map
-                    (nil? (get-in net-map node-path))
-                    (assoc-in node-path node-value)
+                    (not (nil? xf))
+                    (assoc-in (conj node-path :xf) xf)
 
-                    (not (or (= tree-type :output) (nil? super-path)))
-                    (-> (update-in (conj node-path :outputs) conj super-path)
-                        (update-in (conj super-path :inputs) conj node-path))
+                    (not (or (= tree-type :outputs) (nil? super-path)))
+                    (-> (update-in (conj node-path :outputs) (fnil conj #{}) super-path)
+                        (update-in (conj super-path :inputs) (fnil conj #{}) node-path))
 
                     true
                     (walk-trees sub-trees node-path))))
@@ -78,7 +74,7 @@
            (:outputs net-map)))))
 
 (defn assert-no-outputs [inputs]
-  (assert (->> inputs normalize-trees (map first) (every? #{:input :node}))
+  (assert (->> inputs normalize-trees (map first) (every? #{:inputs :nodes}))
           "Output nodes are not allowed as inputs")
   inputs)
 
@@ -129,9 +125,9 @@
        ([] net-map)
        ([rf] (net-xf rf))))))
 
-(defn input [k] (list :input k #{} (gensym 'i)))
-(defn node [xf inputs] (list :node xf (assert-no-outputs inputs) (gensym 'n)))
-(defn output [k inputs] (list :output k (assert-no-outputs inputs) (gensym 'o)))
+(defn input [k] (list :inputs k #{}))
+(defn node [xf inputs] (list :nodes (gensym 'n) (assert-no-outputs inputs) xf))
+(defn output [k inputs] (list :outputs k (assert-no-outputs inputs)))
 
 (defn embed [net-xf input-map]
   (-> (net-xf)
