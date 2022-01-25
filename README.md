@@ -11,7 +11,8 @@ of events.
 
 #_functional-declarative
 (def main
-  (->> (h/input :init)
-       (h/node (map #(str "Hello World")))
-       (h/output :stdout)))
+  (->> (input :init)
+       (node (map #(str "Hello World")))
+       (output :stdout)
+       net))
 ```
