@@ -1,2 +1,4 @@
 {:paths ["test" "src" "resources"]
- :deps {org.clojure/core.async {:mvn/version "1.3.618"}}}
+ :deps {io.github.nextjournal/clerk {:mvn/version "0.4.316"}
+        arrowic/arrowic {:mvn/version "0.1.1"}}}
+
