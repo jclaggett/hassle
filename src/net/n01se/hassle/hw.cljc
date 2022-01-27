@@ -9,7 +9,7 @@
 
 (def ex1
   (vary-meta
-    (net (input :foo))
+    (net nil)
     assoc ::ts (tag :foo (range 3))))
 
 (def ex2
