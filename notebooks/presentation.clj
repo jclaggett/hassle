@@ -119,7 +119,7 @@
       (render-net (net/net #{o1 o2})))
     (-> (arr/create-graph)
         (arr/with-graph
-          (render-node [:input :a] nil))
+          (apply arr/insert-vertex! :a (styles :input)))
         arr/as-svg
         clerk/html)]])
 

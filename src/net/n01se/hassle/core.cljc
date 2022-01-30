@@ -1,4 +1,4 @@
-(ns net.n01se.hassle.net
+(ns net.n01se.hassle.core
   (:require [clojure.pprint :refer [pprint]]
 
             [net.n01se.hassle.transducers :as t]))

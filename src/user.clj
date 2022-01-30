@@ -1,6 +1,6 @@
 (require '[nextjournal.clerk :as clerk])
 (require '[arrowic.core :as arr])
-(require '[net.n01se.hassle.net :refer [tag detag net] :as net])
+(require '[net.n01se.hassle.core :refer [tag detag net] :as net])
 (require '[net.n01se.hassle.transducers :refer [final multiplex demultiplex] :as t])
 (require '[net.n01se.hassle.hw :as hw])
 
@@ -19,13 +19,6 @@
             :fill-color "orange"
             :stroke-width 2
             :stroke-color "black"]})
-   
-(defn render-edge [v1 v2]
-  (arr/insert-edge!
-    v1 v2
-    :rounded true
-    :stroke-width 2
-    :stroke-color "black"))
 
 (defn render-net [net-xf]
   (-> (arr/create-graph)
@@ -36,8 +29,10 @@
             (doto (apply arr/insert-vertex! v-id (styles v-type))
               (as-> v1
                 (doseq [v2 v2s]
-                  (render-edge v1 v2)))))))
-                  
+                  (arr/insert-edge!
+                    v1 v2
+                    :stroke-width 2
+                    :stroke-color "black")))))))
       arr/as-svg
       clerk/html))
 
