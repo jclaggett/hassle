@@ -27,8 +27,8 @@
                     (assoc-in (conj node-path :xf) xf)
 
                     (not (or (= tree-type :output) (nil? super-path)))
-                    (-> (update-in (conj node-path :output) (fnil conj #{}) super-path)
-                        (update-in (conj super-path :input) (fnil conj #{}) node-path))
+                    (-> (update-in (conj node-path :outputs) (fnil conj #{}) super-path)
+                        (update-in (conj super-path :inputs) (fnil conj #{}) node-path))
 
                     true
                     (walk-trees sub-trees node-path))))
@@ -40,17 +40,17 @@
   (letfn [(compact-paths [paths] (map second paths))]
     (concat
       (map (fn [[k {:keys [outputs]}]]
-             [k :output (compact-paths outputs)])
+             [k :outputs (compact-paths outputs)])
            (:input net-map))
       (map (fn [[k {:keys [outputs inputs]}]]
-             [k :output (compact-paths outputs) :input (compact-paths inputs)])
+             [k :outputs (compact-paths outputs) :inputs (compact-paths inputs)])
            (:node net-map))
       (map (fn [[k {:keys [inputs]}]]
-             [k :input (compact-paths inputs)])
+             [k :inputs (compact-paths inputs)])
            (:output net-map)))))
 
 (defn postwalk-net-map [orig-net-map root-type update-fn]
-  (let [kids (case root-type :input :output :input)
+  (let [kids (case root-type :input :outputs :inputs)
         root-paths (for [k (-> orig-net-map root-type keys)]
                      [root-type k])]
 
@@ -91,16 +91,16 @@
 
 (defn detag
   ([k xs] (sequence (detag k) xs))
-  ([k] (comp (filter #(= (first %) k))
+  ([k] (comp (filter #(and (sequential? %)
+                           (not (empty? %))
+                           (= (first %) k)))
              (take-while #(= (count %) 2))
              (map second))))
 
 (defn match-tags
   ([xf-map xs] (sequence (match-tags xf-map) xs))
   ([xf-map] (t/multiplex (map (fn [[k xf]]
-                                (comp (filter #(and (sequential? %)
-                                                    (<= 1 (count %) 2)))
-                                      (detag k)
+                                (comp (detag k)
                                       xf))
                               xf-map))))
 

@@ -29,11 +29,11 @@
 
 (def ex4
   (vary-meta
-    (->> (input ::ch)
+    (->> (input :ch)
          (node (map #(str "Hello " %)))
          (output :stdout)
          net)
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex5
   (vary-meta
@@ -47,70 +47,70 @@
 
 (def ex6
   (vary-meta
-    (->> (input ::ch)
+    (->> (input :ch)
          (node (take 2))
          (node (map #(str "Hello " %)))
          (output :stdout)
          net)
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex7
   (vary-meta
-    (let [i (input ::ch)
+    (let [i (input :ch)
           a (node (map #(str "Hello " %)) i)
           b (node (map #(str "Goodbye " %)) i)
           o (output :stdout #{a b})]
       (net o))
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex8
   (vary-meta
-    (let [i (input ::ch)
+    (let [i (input :ch)
           a (node (map #(str "Goodbye " %)) i)
           b (node (take 2) i)
           c (node (map #(str "Hello " %)) b)
           o (output :stdout #{a c})]
       (net o))
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex9
   (vary-meta
-    (let [i (input ::ch)
+    (let [i (input :ch)
           a (node (map #(str "Goodbye " %)) i)
-          {c :stdout} (embed ex6 {::ch i})
+          {c :stdout} (embed ex6 {:ch i})
           o (output :stdout #{a c})]
       (net o))
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex10
   (vary-meta
-    (let [ch (input ::ch)
+    (let [ch (input :ch)
           b (node (take 2) ch)
           c (node (map #(str "Hello " %)) b)
           d (node (map #(str "Goodbye " %)) ch)
           e (node (map #(str % "!")) #{c d})
           o (output :stdout #{d e})]
       (net o))
-    assoc ::ts (tag ::ch ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex11
   (vary-meta
-    (let [a (input ::ch1)
-          b (input ::ch2)
+    (let [a (input :ch1)
+          b (input :ch2)
           c (node (take 2) #{a b})
           o (output :stdout c)]
       (net o))
     assoc ::ts (interleave
-                 (tag ::ch1 ["bob" "jim" "joe"])
-                 (tag ::ch2 ["sue" "kim" "meg"]))))
+                 (tag :ch1 ["bob" "jim" "joe"])
+                 (tag :ch2 ["sue" "kim" "meg"]))))
 
 (def ex12
   (vary-meta
-    (let [a (input ::ch1)
+    (let [a (input :ch1)
           b (node identity a)
           o (output :stdout #{a b})]
       (net o))
-    assoc ::ts (tag ::ch1 ["bob" "jim" "joe"])))
+    assoc ::ts (tag :ch1 ["bob" "jim" "joe"])))
 
 (defn suffix
   ([s input-xfs xs] (sequence (suffix s input-xfs) xs))
@@ -129,8 +129,8 @@
 
 (def ex14
   (vary-meta
-    (let [c1 (input ::ch1)
-          c2 (input ::ch2)
+    (let [c1 (input :ch1)
+          c2 (input :ch2)
           n1 (suffix "-n1" c1)
           n2 (suffix "-n2" c2)
           n3 (suffix "-n3" n1)
@@ -138,21 +138,21 @@
           o1 (output :stdout #{n3 n4})]
       (net o1))
     assoc ::ts (interleave
-                 (tag ::ch1 ["bob" "jim" "joe"])
-                 (tag ::ch2 ["sue" "kim" "meg"]))))
+                 (tag :ch1 ["bob" "jim" "joe"])
+                 (tag :ch2 ["sue" "kim" "meg"]))))
 
 (def ex15
   (vary-meta
-    (let [c1 (input ::ch1)
-          c2 (input ::ch2)
+    (let [c1 (input :ch1)
+          c2 (input :ch2)
           n1 (join c1 c2)
           n2 (join c1 (passive c2))
           o1 (output :out1 n1)
           o2 (output :out2 n2)]
       (net #{o1 o2}))
     assoc ::ts (interleave
-                 (tag ::ch1 ["bob" "jim" "joe"])
-                 (tag ::ch2 ["sue" "kim" "meg"]))))
+                 (tag :ch1 ["bob" "jim" "joe"])
+                 (tag :ch2 ["sue" "kim" "meg"]))))
 
 (comment
   (def fake-long "-rw-r--r-- 1 jclaggett jclaggett ")
