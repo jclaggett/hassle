@@ -84,23 +84,10 @@
   inputs)
 
 ;; Attempt 6? 7? at API
-(defn tag
-  ([k xs] (sequence (tag k) xs))
-  ([k] (comp (map (fn [x] [k x]))
-             (t/final [k]))))
-
-(defn detag
-  ([k xs] (sequence (detag k) xs))
-  ([k] (comp (filter #(and (sequential? %)
-                           (not (empty? %))
-                           (= (first %) k)))
-             (take-while #(= (count %) 2))
-             (map second))))
-
 (defn match-tags
   ([xf-map xs] (sequence (match-tags xf-map) xs))
   ([xf-map] (t/multiplex (map (fn [[k xf]]
-                                (comp (detag k)
+                                (comp (t/detag k)
                                       xf))
                               xf-map))))
 
@@ -117,7 +104,7 @@
              (condp = node-type
                :input (multiplex' output-xfs')
                :node (demultiplex' (comp xf (multiplex' output-xfs')))
-               :output (demultiplex' (tag node-id))))))
+               :output (demultiplex' (t/tag node-id))))))
        :input
        match-tags)))
 
@@ -170,7 +157,7 @@
 (defn join [& inputs]
   (->> inputs
        (map active)
-       (map-indexed #(node (tag %1) %2))
+       (map-indexed #(node (t/tag %1) %2))
        set
        (node (->> inputs
                   (map active?)

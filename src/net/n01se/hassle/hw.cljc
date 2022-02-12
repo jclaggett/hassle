@@ -1,8 +1,10 @@
 (ns net.n01se.hassle.hw
   (:require [clojure.pprint :refer [pprint]]
 
+            [net.n01se.hassle.transducers
+             :refer [tag]]
             [net.n01se.hassle.core
-             :refer [net tag input node output embed join passive]]))
+             :refer [net input node output embed join passive]]))
 
 (defn run-ex [xf]
   (sequence xf (-> xf meta ::ts)))

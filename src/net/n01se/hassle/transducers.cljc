@@ -118,3 +118,17 @@
                        (step rf a input-values)
                        a))))
            (fini [a] (fini rf a))))))))
+
+(defn tag
+  ([k xs] (sequence (tag k) xs))
+  ([k] (comp (map (fn [x] [k x]))
+             (final [k]))))
+
+(defn detag
+  ([k xs] (sequence (detag k) xs))
+  ([k] (comp (filter #(and (sequential? %)
+                           (not (empty? %))
+                           (= (first %) k)))
+             (take-while #(= (count %) 2))
+             (map second))))
+

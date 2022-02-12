@@ -1,12 +1,13 @@
 (require '[nextjournal.clerk :as clerk])
 (require '[arrowic.core :as arr])
-(require '[net.n01se.hassle.core :refer [tag detag net] :as net])
-(require '[net.n01se.hassle.transducers :refer [final multiplex demultiplex] :as t])
+(require '[net.n01se.hassle.core :refer [net] :as net])
+(require '[net.n01se.hassle.transducers :refer [final multiplex demultiplex tag detag] :as t])
 (require '[net.n01se.hassle.hw :as hw])
 
 (def styles
   {:node [:shape "ellipse"
           :perimeter "ellipsePerimeter"
+          :fill-color "lightyellow"
           :stroke-width 2
           :stroke-color "black"]
    :input [:shape "rectangle"
