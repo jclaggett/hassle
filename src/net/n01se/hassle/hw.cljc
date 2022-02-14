@@ -11,14 +11,14 @@
 
 (def ex1
   (vary-meta
-    (net nil)
+    (net 'ex1 nil)
     assoc ::ts (tag :foo (range 3))))
 
 (def ex2
   (vary-meta
     (->> (input :init)
          (output :stdout)
-         net)
+         (net 'ex2))
     assoc ::ts (tag :init (range 3))))
 
 (def ex3
@@ -26,7 +26,7 @@
     (->> (input :init)
          (node (map :argv))
          (output :stdout)
-         net)
+         (net 'ex3))
     assoc ::ts (tag :init [{:argv ["ls" "-l"]}])))
 
 (def ex4
@@ -34,7 +34,7 @@
     (->> (input :ch)
          (node (map #(str "Hello " %)))
          (output :stdout)
-         net)
+         (net 'ex4))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex5
@@ -43,7 +43,7 @@
          (node (map #(-> % :env (get "USER"))))
          (node (map #(str "Hello " %)))
          (output :stdout)
-         net)
+         (net 'ex5))
     assoc ::ts (tag :init [{:argv ["ls" "-l"]
                             :env (System/getenv)}])))
 
@@ -53,7 +53,7 @@
          (node (take 2))
          (node (map #(str "Hello " %)))
          (output :stdout)
-         net)
+         (net 'ex6))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex7
@@ -62,7 +62,7 @@
           a (node (map #(str "Hello " %)) i)
           b (node (map #(str "Goodbye " %)) i)
           o (output :stdout #{a b})]
-      (net o))
+      (net 'ex7 o))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex8
@@ -72,7 +72,7 @@
           b (node (take 2) i)
           c (node (map #(str "Hello " %)) b)
           o (output :stdout #{a c})]
-      (net o))
+      (net 'ex8 o))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex9
@@ -81,7 +81,7 @@
           a (node (map #(str "Goodbye " %)) i)
           {c :stdout} (embed ex6 {:ch i})
           o (output :stdout #{a c})]
-      (net o))
+      (net 'ex9 o))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex10
@@ -92,7 +92,7 @@
           d (node (map #(str "Goodbye " %)) ch)
           e (node (map #(str % "!")) #{c d})
           o (output :stdout #{d e})]
-      (net o))
+      (net 'ex10 o))
     assoc ::ts (tag :ch ["bob" "jim" "joe"])))
 
 (def ex11
@@ -101,7 +101,7 @@
           b (input :ch2)
           c (node (take 2) #{a b})
           o (output :stdout c)]
-      (net o))
+      (net 'ex11 o))
     assoc ::ts (interleave
                  (tag :ch1 ["bob" "jim" "joe"])
                  (tag :ch2 ["sue" "kim" "meg"]))))
@@ -111,7 +111,7 @@
     (let [a (input :ch1)
           b (node identity a)
           o (output :stdout #{a b})]
-      (net o))
+      (net 'ex12 o))
     assoc ::ts (tag :ch1 ["bob" "jim" "joe"])))
 
 (defn suffix
@@ -126,7 +126,7 @@
           c (suffix "-c" #{a b})
           d (output :stdout #{a c})
           e (output :stderr b)]
-      (net #{d e}))
+      (net 'ex13 #{d e}))
     assoc ::ts (tag :stdin ["bob" "jim" "joe"])))
 
 (def ex14
@@ -138,7 +138,7 @@
           n3 (suffix "-n3" n1)
           n4 (node (comp (suffix "-n4") (take 2)) #{n1 n2})
           o1 (output :stdout #{n3 n4})]
-      (net o1))
+      (net 'ex14 o1))
     assoc ::ts (interleave
                  (tag :ch1 ["bob" "jim" "joe"])
                  (tag :ch2 ["sue" "kim" "meg"]))))
@@ -151,7 +151,7 @@
           n2 (join c1 (passive c2))
           o1 (output :out1 n1)
           o2 (output :out2 n2)]
-      (net #{o1 o2}))
+      (net 'ex15 #{o1 o2}))
     assoc ::ts (interleave
                  (tag :ch1 ["bob" "jim" "joe"])
                  (tag :ch2 ["sue" "kim" "meg"]))))

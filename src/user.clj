@@ -1,6 +1,6 @@
 (require '[nextjournal.clerk :as clerk])
 (require '[arrowic.core :as arr])
-(require '[net.n01se.hassle.core :refer [net] :as net])
+(require '[net.n01se.hassle.core :as net])
 (require '[net.n01se.hassle.transducers :refer [final multiplex demultiplex tag detag] :as t])
 (require '[net.n01se.hassle.hw :as hw])
 

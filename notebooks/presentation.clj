@@ -18,7 +18,7 @@
         out (net/output :out msg)
         err (net/output :err #{(net/node (net/tag :a) a)
                                (net/node (net/tag :b) b)})]
-    (net/net #{out err})))
+    (net/net 'xfn-example #{out err})))
 
 ;; Next, define an example sequence of input values for the above transducer
 ;; net:
@@ -116,7 +116,7 @@
           n2 (net/node (map -) i2)
           o1 (net/output :c #{n1 n2})
           o2 (net/output :d n2)]
-      (render-net (net/net #{o1 o2})))
+      (render-net (net/net 'multi-io #{o1 o2})))
     (-> (arr/create-graph)
         (arr/with-graph
           (apply arr/insert-vertex! :a (styles :input)))

@@ -17,7 +17,7 @@
       (list trees))))
 
 (defn make-net-map
-  [trees]
+  [label trees]
   (letfn [(walk-trees [net-map trees super-path]
             (reduce
               (fn [net-map [tree-type id sub-trees xf]]
@@ -34,7 +34,7 @@
                     (walk-trees sub-trees node-path))))
               net-map
               (normalize-trees trees)))]
-    (walk-trees {} trees nil)))
+    (walk-trees {:label label} trees nil)))
 
 (defn compact-net-map [net-map]
   (letfn [(compact-paths [paths] (map second paths))]
@@ -109,9 +109,9 @@
        match-tags)))
 
 (defn net
-  ([net-tree xs] (sequence (net net-tree) xs))
-  ([net-tree]
-   (let [net-map (make-net-map net-tree)]
+  ([label net-tree xs] (sequence (net net-tree) xs))
+  ([label net-tree]
+   (let [net-map (make-net-map label net-tree)]
      (fn transducer
        ([] net-map)
        ([rf] ((make-net-xf net-map) rf))))))
