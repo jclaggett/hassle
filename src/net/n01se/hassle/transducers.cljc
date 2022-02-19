@@ -85,37 +85,35 @@
                                 a))))]
            (:rf (vswap! *cache assoc :rf rf''))))))))
 
-(defn gate
-  ([input-modes xs] (sequence (gate input-modes) xs))
+(defn join-index-tags
+  ([input-modes xs] (sequence (join-index-tags input-modes) xs))
   ([input-modes]
    (fn transducer [rf]
-     (let [*active-inputs (volatile! (set
-                                       (keep-indexed #(when %2 %1)
-                                                     input-modes)))
-           *received-inputs (volatile! #{})
-           *input-values (volatile! (vec (repeat (count input-modes) nil)))]
-       (if (empty? @*active-inputs)
-         ;; if there are no active inputs ever, this transducer is trivial.
+     (let [*inputs (volatile!
+                     {:active (set (keep-indexed #(when %2 %1) input-modes))
+                      :needed (set (range (count input-modes)))})
+           *values (volatile! (vec (repeat (count input-modes) nil)))]
+       (if (empty? (:active @*inputs))
          (reducer
            (init [] (init rf))
            (step [a v] (reduced a))
            (fini [a] (fini rf a)))
          (reducer
            (init [] (init rf))
-           (step [a [i v :as couple]]
-                 (if (= (count couple) 1) ;; i.e. this stream is ending
-                   (let [active-inputs (vswap! *active-inputs disj i)
-                         received-inputs @*received-inputs]
-                     (if (or (empty? active-inputs)
-                             (and (< (count received-inputs) (count input-modes))
-                                  (not (contains? received-inputs i))))
+           (step [a [i v :as tag]]
+                 (if (= (count tag) 1) ;; i.e. this tag is ending.
+                   (let [{:keys [active needed]}
+                         (vswap! *inputs update :active disj i)]
+                     (if (or (empty? active)
+                             (needed i))
                        (reduced a)
                        a))
-                   (let [received-inputs (vswap! *received-inputs conj i)
-                         input-values (vswap! *input-values assoc i v)]
-                     (if (and (= (count received-inputs) (count input-modes))
-                              (nth input-modes i))
-                       (step rf a input-values)
+                   (let [{:keys [active needed]}
+                         (vswap! *inputs update :needed disj i)
+                         values (vswap! *values assoc i v)]
+                     (if (and (active i)
+                              (empty? needed))
+                       (step rf a values)
                        a))))
            (fini [a] (fini rf a))))))))
 

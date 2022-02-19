@@ -1,10 +1,9 @@
 ;; # Transducer Nets
 ;; ## Presentation Outline
-;; 1. Demo
-;; 2. net transducers: how `net` works
-;; 3. transducer nets: describing nets
-;; 4. Kahn Process Networks
-;; 5. Summary
+;; 1. Tutorial on working with transducer nets
+;; 2. Understanding the `net` transducer
+;; 3. Kahn Process Networks
+;; 4. Next Steps
 
 ;; ## 1. Demo
 ;; Start by defining an example transducer net and show how we can interact
@@ -16,8 +15,8 @@
         msg (net/node (map (fn [[a b]] (str b " is " a " years old")))
                       join-ab)
         out (net/output :out msg)
-        err (net/output :err #{(net/node (net/tag :a) a)
-                               (net/node (net/tag :b) b)})]
+        err (net/output :err #{(net/node (tag :a) a)
+                               (net/node (tag :b) b)})]
     (net/net 'xfn-example #{out err})))
 
 ;; Next, define an example sequence of input values for the above transducer

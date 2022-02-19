@@ -9,14 +9,14 @@
 
 ;; implementation
 
-(defn normalize-trees [trees]
-  (if (set? trees)
-    (mapcat normalize-trees trees)
-    (if (nil? trees)
+(defn normalize-inputs [inputs]
+  (if (set? inputs)
+    (mapcat normalize-inputs inputs)
+    (if (nil? inputs)
       (list)
-      (list trees))))
+      (list inputs))))
 
-(defn make-net-map
+(defn normalize-net
   [label trees]
   (letfn [(walk-trees [net-map trees super-path]
             (reduce
@@ -33,26 +33,14 @@
                     true
                     (walk-trees sub-trees node-path))))
               net-map
-              (normalize-trees trees)))]
+              (normalize-inputs trees)))]
     (walk-trees {:label label} trees nil)))
 
-(defn compact-net-map [net-map]
-  (letfn [(compact-paths [paths] (map second paths))]
-    (concat
-      (map (fn [[k {:keys [outputs]}]]
-             [k :outputs (compact-paths outputs)])
-           (:input net-map))
-      (map (fn [[k {:keys [outputs inputs]}]]
-             [k :outputs (compact-paths outputs) :inputs (compact-paths inputs)])
-           (:node net-map))
-      (map (fn [[k {:keys [inputs]}]]
-             [k :inputs (compact-paths inputs)])
-           (:output net-map)))))
-
-(defn postwalk-net-map [orig-net-map root-type update-fn]
-  (let [kids (case root-type :input :outputs :inputs)
-        root-paths (for [k (-> orig-net-map root-type keys)]
-                     [root-type k])]
+(defn postwalk [net-xf roots update-fn]
+  (let [orig-net-map (net-xf)
+        kids (case roots :input :outputs :inputs)
+        root-paths (for [k (-> orig-net-map roots keys)]
+                     [roots k])]
 
     (letfn [(update-node [net-map path]
               (update-in
@@ -79,7 +67,7 @@
         (visit-nodes root-paths))))) 
 
 (defn assert-no-outputs [inputs]
-  (assert (->> inputs normalize-trees (map first) (every? #{:input :node}))
+  (assert (->> inputs normalize-inputs (map first) (every? #{:input :node}))
           "Output nodes are not allowed as inputs")
   inputs)
 
@@ -92,10 +80,10 @@
                               xf-map))))
 
 (defn make-net-xf
-  ([net-map xs] (sequence (make-net-xf net-map) xs))
-  ([net-map]
-   (-> net-map
-       (postwalk-net-map
+  ([net-xf xs] (sequence (make-net-xf net-xf) xs))
+  ([net-xf]
+   (-> net-xf
+       (postwalk
          :input
          (fn [[node-type node-id] {:keys [xf inputs outputs]}  output-xfs]
            (let [output-xfs' (if (empty? output-xfs) [identity] output-xfs)
@@ -111,17 +99,14 @@
 (defn net
   ([label net-tree xs] (sequence (net net-tree) xs))
   ([label net-tree]
-   (let [net-map (make-net-map label net-tree)]
+   (let [net-map (normalize-net label net-tree)]
      (fn transducer
        ([] net-map)
-       ([rf] ((make-net-xf net-map) rf))))))
+       ([rf] ((make-net-xf transducer) rf))))))
 
 (defn input [k] (list :input k #{}))
 (defn node [xf inputs] (list :node (gensym 'n) (assert-no-outputs inputs) xf))
 (defn output [k inputs] (list :output k (assert-no-outputs inputs)))
-
-(defn postwalk [net-xf roots update-fn]
-  (postwalk-net-map (net-xf) roots update-fn))
 
 (defn embed [net-xf input-map]
   (-> net-xf
@@ -155,13 +140,25 @@
     (deref x)))
 
 (defn join [& inputs]
-  (->> inputs
-       (map active)
-       (map-indexed #(node (t/tag %1) %2))
-       set
-       (node (->> inputs
-                  (map active?)
-                  t/gate))))
+  (node (t/join-index-tags (map active? inputs))
+        (->> inputs
+             (map active)
+             (map-indexed #(node (t/tag %1) %2))
+             set)))
+
+;; printing/debugging
+(defn compact-net-map [net-map]
+  (letfn [(compact-paths [paths] (map second paths))]
+    (concat
+      (map (fn [[k {:keys [outputs]}]]
+             [k :outputs (compact-paths outputs)])
+           (:input net-map))
+      (map (fn [[k {:keys [outputs inputs]}]]
+             [k :outputs (compact-paths outputs) :inputs (compact-paths inputs)])
+           (:node net-map))
+      (map (fn [[k {:keys [inputs]}]]
+             [k :inputs (compact-paths inputs)])
+           (:output net-map)))))
 
 (defn pr-net [net-xf]
   (compact-net-map (net-xf)))
