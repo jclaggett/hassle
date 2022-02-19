@@ -38,5 +38,5 @@
       clerk/html))
 
 (clerk/serve! {:browse? true})
-(clerk/serve! {:watch-paths ["notebooks" "src"]})
-(clerk/show! "notebooks/hello.clj")
+(clerk/serve! {:watch-paths ["docs" "src"]})
+(clerk/show! "docs/xf-nets.clj")
