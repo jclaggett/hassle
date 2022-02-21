@@ -1,20 +1,11 @@
-# Inversion of control
+# Transducer Nets
+Using transducers to describe computational graphs.
 
-Consider the following snippet:
-```
-  ...
-  (let [text (read "file.txt")]
-    ...)
-```
+## Outline
 
-And this inversion of the above:
-
-```
-(let [text (input ::file)
-      work (node text ...)
-      out (output work :stdout)]
-  (weave out)
-```
+1. Intro and Terms
+2. Tutorial on making transducer nets
+3. Digging into `net` transducer
 
 # netducer and other transducers
 
