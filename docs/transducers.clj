@@ -137,3 +137,5 @@
 ;; This means visualization tools may be used:
 
 (render-net multi-io-example)
+
+;; To learn more on representing transducer nets for the `net` transducer, refer to the ajoining notebook

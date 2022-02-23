@@ -1,131 +1,213 @@
 ;; # Transducer Nets
-;; ## Presentation Outline
-;; 1. Tutorial on working with transducer nets
-;; 2. Understanding the `net` transducer
-;; 3. Kahn Process Networks
-;; 4. Next Steps
+;; This notebook walks through the core library of functions used to define
+;; transducer nets. It starts with the primitves: `net`, `input`, `node`, and `output`
+;; and then covers the more advanced functions `join` and `embed`.
 
-;; ## 1. Demo
-;; Start by defining an example transducer net and show how we can interact
-;; with it.:
-(def xfn-example
-  (let [a (net/input :s1)
-        b (net/input :s2)
-        join-ab (net/join a b)
-        msg (net/node (map (fn [[a b]] (str b " is " a " years old")))
-                      join-ab)
-        out (net/output :out msg)
-        err (net/output :err #{(net/node (tag :a) a)
-                               (net/node (tag :b) b)})]
-    (net/net 'xfn-example #{out err})))
+(require '[net.n01se.hassle.core
+           :refer [net input node output join passive embed]])
 
-;; Next, define an example sequence of input values for the above transducer
-;; net:
-(def xfn-inputs
-  [[:s1 1] [:s2 "jim"] [:s1 2] [:s1 3] [:s2 "joe"] [:s2 "sue"]])
+;; ## `net` function
+;; `net` is always found at the end of a transducer net specification and it
+;; converts that specification into a transducer. Also, `net` takes a label to
+;; be associated with the net specification for documentition purposes.
 
-;; The example above is a transducer and can be used as one:
-(into [] xfn-example xfn-inputs)
+;; The smallest transducer net definable is an empty one:
+(def empty-net (net 'empty-net nil))
 
-;; In addtion to being a transducer, transducer nets are also able to provide a graph describing their topology.
-(xfn-example)
+;; This is a proper transducer function that just ignores all input:
+(sequence empty-net [1 2 3]) ;;
 
-;; Same topology diagramed
-(render-net xfn-example)
+;; In addition to being a transducer, net functions also may be called with
+;; zero arguments and they return a normalized representation of the net:
 
-;; The exciting bit is that this network is entirely described with
-;; transducers!
+(empty-net)
 
-;; ## 2. net transducers: how `net` works
-;; It's transducers all the way down and so we can learn about transducers made
-;; by `net` by showing more primitive transducers that it uses.
+;; This normalized representation may be used by tooling such as `render-net`
+;; below:
+(render-net empty-net)
 
-;; ### 2.1 `final` transducer
-;; The `final` transducer just appends a final value to the sequence of values.
-;; It is really the transducer equivalent to `conj`. Also, closely related to
-;; `wrap` found in https://github.com/cgrand/xforms
-(def xf (final :done))
-(sequence xf [])
-(sequence xf [1 2 3])
+;; ## `input` & `output` functions
+;; The next smallest transducer net has a single input and a single output
+;; connected to each other:
 
-;; ### 2.2 `tag` transducer
-;; `tag` is built using `map` and `final` transducers and converts a sequence
-;; of values into a sequence of 'tagged unions' (also known as variants). This definition is called tag' to avoid overriding the actual definition.
+(def net-2
+  (let [in (input :in)
+        out (output :out in)
+        xfn (net 'net-2 out)]
+    xfn))
 
-(defn tag' [k]
-  (comp (map (partial vector k))
-        (final [k])))
-(sequence (tag' :foo) (range 4))
+(render-net net-2)
 
-;; The sequence of tagged unions always ends with a special 'closing' tag. This final tag is useful when mutliple tagged union sequences are mixed together:
+;; For a transducer net to be valid, there are two connectivity properties that
+;; must be true:
+;; 1. Each input is connected to at least one output.
+;; 2. Each output is connected to at least one input.
 
-(interleave (sequence (tag' :a) (range 2))
-            (sequence (tag' :b) (range 9 7 -1)))
+;; While it is possible to describe a net with unconnected inputs or outputs,
+;; it won't work and may lose track of unconnected elements.
 
-;; ### 2.3 `detag` transducer
-;; `detag` acts as the complement of `tag` and extracts the values from a
-;; sequence of tagged untions. Non-tagged non-matching tagged values
-;; are ignored. Also, the detagged sequnce stops when a 'closing' tag tag is found.
+;; ### tagged unions
+;; To use transducer nets, they expect a sequence of tagged unions or variants
+;; as input and produce a sequence of tagged unions. A tagged union is just a
+;; vector pair like: `[tag value]`. Additionally, a 'final' tagged union that
+;; contains just the tag and no value is used to indicate the end of that
+;; sequence of tagged unions: `[tag]`.
 
-(sequence (comp (tag' :a)
-                (detag :a))
-          (range 3))
+;; In the case of `net-2`, it expects tagged unions with the tag `:in`
+;; and will produce a sequence of tagged unions with the tag `:out`.
 
-(sequence (detag :a)
-          '([:a 1] [:b 2] [:a 3] 42 "bob" [:a 4] [:a] [:c 2] [:a "eh?"]))
+;; Here we feed `net-2` the following sequence of various values:
 
-;; ### 2.4 `multiplex` transducer
-;; `multiplex` is a higher order transducer that applies each value to multiple
-;; transducers. The results of all transducers are returned in a sequence.
-;; `multiplex` is reduced when all transducers are reduced. This particualar
-;; transducer is directly inspired by the `multiplex` found over at
-;; https://github.com/cgrand/xforms
+(sequence net-2 [[:in "hello"]      ;; ✓ correct tag
+                 [:wrong "goodbye"] ;; 🗴 wrong tag
+                 42                 ;; 🗴 not a tagged union
+                 [:in "world"]      ;; ✓ correct tag
+                 [:in]              ;; ✓ final tag
+                 [:in "hello?"]     ;; 🗴 after final tag
+                 nil])
 
-(sequence (multiplex [(take 2) (map -)]) (range 1 5))
+;; ### multiple inputs
+;; In the above example, the output was connected to a singele input. To
+;; connect an output to multiple inputs, a standard Clojure Set is used as in
+;; this example:
 
-(sequence (multiplex [(tag :a) (tag :b)]) (range 2))
-(sequence (multiplex [(detag :a) (detag :b)]) [[:b "j"] [:b "w"] [:a 1]])
+(let [in-1 (input :in-1)
+      in-2 (input :in-2)
+      out (output :out #{in-1 in-2}) ;; Use #{} to connect multiple inputs
+      xfn (net 'net-3 out)]
+  (render-net xfn))
 
-;; ### 2.5 `demultiplex` transducer
-;; `demultiplex` acts the complement of multiplex in that multiple transducers
-;; can share a single `demultiplex` transducer so that its state is shared.
-;; _Warning_ This transducer is not safe to reuse across multiple uses of
-;; transducers and so should only be used within the context of `multiplex`
-;; transducers (or similar higher order transducers).
+;; ### multiple outputs
+;; Of course it is also possible to have multiple outputs connected to a single
+;; input:
 
-(let [common (demultiplex (take 2))
-      xf-str (comp (map str) common)
-      xf-neg (comp (map -) common)
-      xf (multiplex [xf-str xf-neg])]
-  (sequence xf [1 2 3 4])) 
+(let [in (input :in)
+      out-1 (output :out-1 in)
+      out-2 (output :out-2 in)
+      xfn (net 'net-4 #{out-1 out-2})] ;; now net uses #{} to handle multiple outputs
+  (render-net xfn))
 
-;; ### 2.6 `net` transducer
-;; Finally, we can use the above transducers to built a net of transducers into
-;; a single high order transducer. This is what `net` does by taking a directed
-;; acyclic graph of transducers and using `detag`, `tag`, `multiplex` and
-;; `demultiplex` to compose the DAG of transducers into a single transducer.
+;; Just for completeness, a transducer net with two inputs and two outputs:
 
-;; TODO: draw two diagrams: one with network of xfs and same network expanded
-;; with various xfs just described.
+(let [a (input :a)
+      b (input :b)
+      c (output :c a)
+      d (output :d #{a b})
+      xfn (net 'net-5 #{c d})]
+   (render-net xfn))
 
-(clerk/table
-  [[(let [i1 (net/input :a)
-          i2 (net/input :b)
-          n1 (net/node (map inc) #{i1 i2})
-          n2 (net/node (map -) i2)
-          o1 (net/output :c #{n1 n2})
-          o2 (net/output :d n2)]
-      (render-net (net/net 'multi-io #{o1 o2})))
-    (-> (arr/create-graph)
-        (arr/with-graph
-          (apply arr/insert-vertex! :a (styles :input)))
-        arr/as-svg
-        clerk/html)]])
+;; ## `node` function
+;; The body of transducer nets is defined by calls to the `node` function. Each
+;; call specifies the transducer for node in the net. Each node is considered
+;; to be both an input and output in terms of the two previously mentioned
+;; connectivity properties. In other words, each node is connected to at least
+;; one input and at least one output.
 
-;; ## 3. transducer nets: describing nets
-;; ### 3.1 Primitives: `input`, `node`, `output`
-;; ### 3.2 Embedding
-;; ### 3.3 Joining
+;; ### single node example
+;; Here is a simple transducer net with a single node:
+(def net-6
+  (let [in (input :in)
+        n1 (node (map inc) in)
+        out (output :out n1)
+        xfn (net 'net-6 out)]
+    xfn))
 
-;; ## 4. Kahn Process Networks
-;; ## 5. Summary
+(render-net net-6)
+
+(sequence net-6 [[:in 1] [:in 2] [:in 3]])
+
+;; ### multi node example
+;; Here is a more complex transducer with multiple nodes and multiple inputs:
+(def net-7
+  (let [untrusted (input :untrusted)
+        trusted (input :trusted)
+
+        numbers (node (take-while number?) untrusted)
+        odd-numbers (node (filter odd?) numbers)
+        even-numbers (node (filter even?) numbers)
+        region1-numbers (node (map inc) odd-numbers)
+        region2-numbers (node identity even-numbers)
+
+        region1 (output :region1 #{region1-numbers trusted})
+        region2 (output :region2 #{region2-numbers trusted})
+        xfn (net 'net-7 #{region1 region2})]
+    xfn))
+
+(render-net net-7)
+
+(sequence net-7 [[:untrusted 234]
+                 [:untrusted 237]
+                 [:untrusted 238]
+                 [:trusted -6]
+                 [:untrusted :wat]
+                 [:untrusted 239]
+                 [:trusted -8]])
+
+;; ## `join` function
+;; So far all connections have been asynchronous. Values flowing into an ouput from
+;; one connection is independent from values flowing in from other connections.
+;; `join` synchronizes values flowing across multiple connections. First,
+;; `join` waits for at least one value to arrive on each connection and, from
+;; that point on, will produce a vector containing the latest value for each
+;; connection when a new value is sent on any connection.
+
+(def net-8
+  (let [in-1 (input :in-1)
+        in-2 (input :in-2)
+        a (join [in-1 in-2])
+        o (output :out a)
+        xfn (net 'net-8 o)]
+    xfn))
+
+(sequence net-8 [[:in-1 'a]
+                 [:in-1 'b]
+                 [:in-2 1]
+                 [:in-1 'c]
+                 [:in-2 2]])
+
+;; ### `passive` joins
+;; In the previous example, a value arriving on either connection caused `join` to
+;; produce a new vector. When calling `join`, some of the inputs may be wrapped
+;; using `passive`. Values flowing through passive connections will not cause
+;; `join` to produce a vector. Marking all inputs as `passive` will cause
+;; `join` to never emit a value.
+
+(def net-9
+  (let [in-1 (input :in-1)
+        in-2 (input :in-2)
+        a (join [(passive in-1) in-2])
+        o (output :out a)
+        xfn (net 'net-9 o)]
+    xfn))
+
+(sequence net-9 [[:in-1 'a]
+                 [:in-1 'b]
+                 [:in-2 1]
+                 [:in-1 'c]
+                 [:in-2 2]])
+
+;; ## `embed` function
+;; The last function provided in the core API provides a way to define new
+;; transducer nets using previously defined nets. `embed` takes a map
+;; associating inputs to the input tags found in the embedded net and it
+;; returns a map of output tags to outputs. Once `embed` is complete, the
+;; inputs and outputs of the embedded net are replaced with direct connections
+;; to nodes in the new net.
+
+
+(def net-10
+  (let [in-a (input :in-a)
+        in-b (input :in-b)
+
+        {a :region1
+         b :region2}
+        (embed net-7
+               {:trusted in-a
+                :untrusted in-b})
+        out-a (output :out-a a)
+        out-b (output :out-b b)
+
+        xfn (net 'net-10 #{out-a out-b})]
+    xfn))
+
+(render-net net-10)
