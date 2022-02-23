@@ -20,11 +20,14 @@
   [label trees]
   (letfn [(walk-trees [net-map trees super-path]
             (reduce
-              (fn [net-map [tree-type id sub-trees xf]]
+              (fn [net-map [tree-type id sub-trees xf label]]
                 (let [node-path [tree-type id]]
                   (cond-> net-map
                     (not (nil? xf))
                     (assoc-in (conj node-path :xf) xf)
+
+                    (not (nil? label))
+                    (assoc-in (conj node-path :label) label)
 
                     (not (or (= tree-type :output) (nil? super-path)))
                     (-> (update-in (conj node-path :outputs) (fnil conj #{}) super-path)
@@ -105,17 +108,36 @@
        ([rf] ((make-net-xf transducer) rf))))))
 
 (defn input [k] (list :input k #{}))
-(defn node [xf inputs] (list :node (gensym 'n) (assert-no-outputs inputs) xf))
 (defn output [k inputs] (list :output k (assert-no-outputs inputs)))
+
+(defn node* [label xf inputs]
+  (list :node
+        (gensym 'n)
+        (assert-no-outputs inputs)
+        xf
+        label))
+
+(defmacro node [xf inputs]
+  (let [label (if (sequential? xf)
+                (if (symbol? (first xf))
+                  (if (= (count xf) 1)
+                    (str (first xf))
+                    (if (sequential? (second xf))
+                      (str (first xf) " …")
+                      (if (> (count xf) 2)
+                        (str (first xf) " " (second xf) " …")
+                        (str (first xf) " " (second xf))))))
+                (str xf))]
+    `(node* '~label ~xf ~inputs)))
 
 (defn embed [net-xf input-map]
   (-> net-xf
       (postwalk
         :output
-        (fn [[node-type node-id] {xf :xf} input-xfs]
+        (fn [[node-type node-id] {xf :xf label :label} input-xfs]
           (condp = node-type
             :input (input-map node-id)
-            :node (node xf (set input-xfs))
+            :node (node* label xf (set input-xfs))
             :output (set input-xfs))))
       :output))
 
@@ -139,7 +161,7 @@
     x
     (deref x)))
 
-(defn join [& inputs]
+(defn join [inputs]
   (node (t/join-index-tags (map active? inputs))
         (->> inputs
              (map active)

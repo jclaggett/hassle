@@ -24,10 +24,13 @@
 (defn render-net [net-xf]
   (-> (arr/create-graph)
       (arr/with-graph
+        (arr/insert-vertex! (:label (net-xf)))
         (net/postwalk
           net-xf :input
           (fn [[v-type v-id :as path] node v2s]
-            (doto (apply arr/insert-vertex! v-id (styles v-type))
+            (doto (apply arr/insert-vertex!
+                         (node :label v-id)
+                         (styles v-type))
               (as-> v1
                 (doseq [v2 v2s]
                   (arr/insert-edge!

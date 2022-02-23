@@ -147,8 +147,8 @@
   (vary-meta
     (let [c1 (input :ch1)
           c2 (input :ch2)
-          n1 (join c1 c2)
-          n2 (join c1 (passive c2))
+          n1 (join [c1 c2])
+          n2 (join [c1 (passive c2)])
           o1 (output :out1 n1)
           o2 (output :out2 n2)]
       (net 'ex15 #{o1 o2}))
