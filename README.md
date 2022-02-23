@@ -1,8 +1,8 @@
 # Hassle
 
-An experimental reactive functional library for Clojure. The primary goal is to
-demonstrate the ability to express programs as a DAG of functions over streams
-of events.
+An experimental reactive functional library for Clojure. The primary goal
+is to demonstrate the ability to express programs as a DAG of functions
+over streams of events.
 
 ```clojure
 #_procedural-imperative
@@ -14,5 +14,10 @@ of events.
   (->> (input :init)
        (node (map #(str "Hello World")))
        (output :stdout)
-       net))
+       (net 'main)))
 ```
+
+## Usage
+
+Refer to `docs/xf-nets.clj` for an introduction to the various functions
+and supporting concepts.

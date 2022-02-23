@@ -1,4 +1,4 @@
-;; # Building the `net` transducer
+;; # Review of `net` transducers
 ;; It's transducers all the way down and so we can learn about the `net`
 ;; transducer by showing the more primitive transducers it uses.
 
@@ -11,9 +11,10 @@
   (require '[net.n01se.hassle.core
              :refer [net input node output]]))
 
-;; ## Transducer Family Tree
-;; This diagram shows the 'familty tree' of transducers used by `net`:
-;; [TODO] make a tree diagram!
+;; ## Transducer Composition Tree
+;; This diagram shows the 'composition tree' of transducers used to define `net` (blue are
+;; transducers added):
+(render-xf-compose-tree)
 
 ;; ## built-in transducers
 ;; Several of the most primitve transducers in the tree come standard with
@@ -81,8 +82,8 @@
 ;; `multiplex` is a higher order transducer that applies each value to multiple
 ;; transducers. The results of all transducers are returned in a sequence.
 ;; `multiplex` is reduced when all transducers are reduced. This particular
-;; transducer is directly inspired by the `multiplex` found over at
-;; https://github.com/cgrand/xforms
+;; transducer is directly inspired by the `multiplex` transducer found over at
+;; https://github.com/cgrand/xforms.
 (sequence (multiplex [(take 2) (map -)]) (range 1 5))
 (sequence (multiplex [(tag' :a) (tag' :b)]) (range 2))
 (sequence (multiplex [(detag' :a) (detag' :b)]) [[:b "j"] [:b "w"] [:a 1]])

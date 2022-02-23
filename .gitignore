@@ -1,4 +1,5 @@
 ### Clerk ###
+.clerk/
 .cache/
 
 # Created by https://www.toptal.com/developers/gitignore/api/vim,clojure
