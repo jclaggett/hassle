@@ -56,8 +56,8 @@
 (defn demultiplex
   ([xf xs] (sequence (demultiplex xf) xs))
   ([xf]
-   (let [*ref-count (volatile! 0)
-         *cache (volatile! {})
+   (let [*ref-count (volatile! 0) ;; TODO: use an atom?
+         *cache (volatile! {}) ;; TODO: use an atom?
          label (-> xf meta :label)]
      (fn transducer [rf]
        (vswap! *ref-count inc)

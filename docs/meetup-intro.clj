@@ -12,7 +12,7 @@
 ;; ## Intro
 ;; * **What**: library that allows composition of transducers in Directed
 ;; Acyclic Graph.
-;; * **Why**: Define Process Flow Networks with pure functions.
+;; * **Why**: Represent Process Flow Programs with pure functions.
 ;; * **Where**: https://github.com/jclaggett/hassle
 ;; * **Status**: Experimental. It works!
 
