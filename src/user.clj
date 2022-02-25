@@ -64,7 +64,13 @@
      arr/as-svg
      clerk/html))
 
-
+(defn build-static-app! []
+  (clerk/build-static-app! {:paths (map #(str "docs/" % ".clj")
+                                        ["meeting-intro"
+                                         "xf-nets"
+                                         "transducers"
+                                         "meeting-outro"])
+                            :bundle? false}))
 
 (clerk/serve! {:browse? true})
 (clerk/serve! {:watch-paths ["docs" "src"]})
