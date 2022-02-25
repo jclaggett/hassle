@@ -70,7 +70,9 @@
                                          "xf-nets"
                                          "transducers"
                                          "meeting-outro"])
-                            :bundle? false}))
+                            :bundle? false
+                            :out-path "docs/build"
+                            :path-prefix "hassle/build/"}))
 
 (clerk/serve! {:browse? true})
 (clerk/serve! {:watch-paths ["docs" "src"]})
