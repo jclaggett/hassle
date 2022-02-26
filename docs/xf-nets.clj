@@ -20,12 +20,7 @@
 ;; In addition to being a transducer, net functions also may be called with
 ;; zero arguments and they return a normalized representation of the net:
 
-(meta empty-net)
 (empty-net)
-
-;; This normalized representation may be used by tooling such as `render-net`
-;; below:
-empty-net
 
 ;; ## `input` & `output` functions
 ;; The next smallest transducer net has a single input and a single output
