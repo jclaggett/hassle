@@ -40,6 +40,10 @@
       arr/as-svg
       clerk/html))
 
+(clerk/set-viewers!
+  [{:pred #(-> % meta :xfn)
+    :transform-fn render-net}])
+
 (defn render-xf-compose-tree []
  (-> (arr/create-graph)
      (arr/with-graph

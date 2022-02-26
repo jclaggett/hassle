@@ -135,8 +135,6 @@
 ;; via zero arg invocation of the transducer net:
 (multi-io-example)
 
-;; This means visualization tools may be used:
-
-(render-net multi-io-example)
+;; This means visualization tools, like the one used in this notebook, may be used.
 
 ;; To learn more on representing transducer nets for the `net` transducer, refer to the ajoining notebook

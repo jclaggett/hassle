@@ -103,6 +103,7 @@
   ([label net-tree xs] (sequence (net net-tree) xs))
   ([label net-tree]
    (let [net-map (normalize-net label net-tree)]
+     ^:xfn
      (fn transducer
        ([] net-map)
        ([rf] ((make-net-xf transducer) rf))))))
