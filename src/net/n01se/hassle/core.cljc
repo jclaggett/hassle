@@ -163,14 +163,19 @@
     (deref x)))
 
 (defn join [inputs]
-  ;; This let is only to print nicer results from node macro
-  (let [join-tags (t/join-index-tags (map active? inputs))
-        tag t/tag]
-    (node join-tags
-          (->> inputs
-               (map active)
-               (map-indexed (fn [i v] (node (tag i) v)))
-               set))))
+  ;; The nodes defined here are mislabeled for readability. Short term fix.
+  ;; Longer term, join should be represented as a subnet.
+  (let [active-inputs? (mapv active? inputs)]
+    (node*
+      'join
+      (t/join-index-tags active-inputs?)
+      (->> inputs
+           (map active)
+           (map-indexed
+             #(node* (if (active-inputs? %1) 'active 'passive)
+                     (t/tag %1)
+                     %2))
+           set))))
 
 ;; printing/debugging
 (defn compact-net-map [net-map]
