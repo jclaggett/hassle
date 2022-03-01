@@ -163,11 +163,14 @@
     (deref x)))
 
 (defn join [inputs]
-  (node (t/join-index-tags (map active? inputs))
-        (->> inputs
-             (map active)
-             (map-indexed #(node (t/tag %1) %2))
-             set)))
+  ;; This let is only to print nicer results from node macro
+  (let [join-tags (t/join-index-tags (map active? inputs))
+        tag t/tag]
+    (node join-tags
+          (->> inputs
+               (map active)
+               (map-indexed (fn [i v] (node (tag i) v)))
+               set))))
 
 ;; printing/debugging
 (defn compact-net-map [net-map]
