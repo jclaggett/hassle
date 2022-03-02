@@ -3,6 +3,8 @@
 ;; transducer nets. It starts with the primitives: `net`, `input`, `node`, and `output`
 ;; and then covers the more advanced functions `join` and `embed`.
 
+^{:nextjournal.clerk/visibility #{:hide}
+  :nextjournal.clerk/viewer :hide-result}
 (require '[net.n01se.hassle.core
            :refer [net input node output join passive embed]])
 
@@ -38,8 +40,8 @@
 ;; ### Connectivity Properties
 ;; For a transducer net to be valid, there are two connectivity properties that
 ;; must be true:
-;; 1. Each input is connected to at least one output.
-;; 2. Each output is connected to at least one input.
+;; 1. Each input is referenced by at least one output.
+;; 2. Each output references at least one input.
 
 ;; While it is possible to describe a net with unconnected inputs or outputs,
 ;; it won't work and may lose track of unconnected elements.
@@ -97,10 +99,10 @@
 
 ;; ## `node` Function
 ;; The body of transducer nets is defined by calls to the `node` function. Each
-;; call specifies the transducer for node in the net. Each node is considered
-;; to be both an input and output in terms of the two previously mentioned
-;; connectivity properties. In other words, each node is connected to at least
-;; one input and at least one output.
+;; call specifies the transducer for that node in the net. Each node is
+;; considered to be both an input and output in terms of the two previously
+;; mentioned connectivity properties. In other words, each node references at
+;; least one input and is referenced by at least one output.
 
 ;; ### Single Node Example
 ;; Here is a simple transducer net with a single node:
@@ -139,7 +141,7 @@
                  [:trusted -8]])
 
 ;; ## `join` Function
-;; So far all connections have been asynchronous. Values flowing into an output
+;; So far all connections have been independent. Values flowing into an output
 ;; from one connection is independent from values flowing in from other
 ;; connections.  `join` synchronizes values flowing across multiple
 ;; connections. First, `join` waits for at least one value to arrive on each
@@ -204,6 +206,6 @@
 
         out-a (output :out-a a)
         out-b (output :out-b b)
-        out-c (output :debug c)]
+        debug (output :debug c)]
 
-    (net 'net-10 #{out-a out-b out-c})))
+    (net 'net-10 #{out-a out-b debug})))

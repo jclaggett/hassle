@@ -3,6 +3,7 @@
 (require '[net.n01se.hassle.core :as net])
 (require '[net.n01se.hassle.transducers :refer [final multiplex demultiplex tag detag] :as t])
 (require '[net.n01se.hassle.hw :as hw])
+(require '[clojure.pprint :refer [pprint]])
 
 (def styles
   {:node [:shape "ellipse"

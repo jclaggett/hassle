@@ -142,10 +142,13 @@
 
 ;; As a simple example demonstrating the above transducer chain:
 (sequence (->> (input :foo)
+
                (node (map inc))
                (node (map str))
+
                (output :bar)
-               (net 'simple))
+
+               (net 'simple-chain))
           [[:foo 1] [:foo 23] [:foo]])
 
 ;; By using `multiplex` and `demultiplex`, the `net` transducer is able to
@@ -155,8 +158,10 @@
 (def multi-io-example
   (let [i1 (input :a)
         i2 (input :b)
+
         n1 (node (map inc) #{i1 i2})
         n2 (node (map -) i2)
+
         o1 (output :c #{n1 n2})
         o2 (output :d n2)]
     (net 'multi-io-example #{o1 o2})))
