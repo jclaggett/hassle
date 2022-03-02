@@ -6,7 +6,7 @@
 (require '[net.n01se.hassle.core
            :refer [net input node output join passive embed]])
 
-;; ## `net` function
+;; ## `net` Function
 ;; `net` is always found at the end of a transducer net specification and it
 ;; converts that specification into a transducer. Also, `net` takes a label to
 ;; be associated with the net specification for documentation purposes.
@@ -22,16 +22,20 @@
 
 (empty-net)
 
-;; ## `input` & `output` functions
+;; ## `input` & `output` Functions
 ;; The next smallest transducer net has a single input and a single output
 ;; connected to each other:
 
 (def net-2
   (let [in (input :in)
-        out (output :out in)
-        xfn (net 'net-2 out)]
-    xfn))
+        out (output :out in)]
+    (net 'net-2 out)))
 
+;; Looking at this net's normalized representation is more interesting than
+;; `empty-net`:
+(net-2)
+
+;; ### Connectivity Properties
 ;; For a transducer net to be valid, there are two connectivity properties that
 ;; must be true:
 ;; 1. Each input is connected to at least one output.
@@ -40,7 +44,7 @@
 ;; While it is possible to describe a net with unconnected inputs or outputs,
 ;; it won't work and may lose track of unconnected elements.
 
-;; ### tagged unions
+;; ### Tagged Unions for IO
 ;; To use transducer nets, they expect a sequence of tagged unions or variants
 ;; as input and produce a sequence of tagged unions. A tagged union is just a
 ;; vector pair like: `[tag value]`. Additionally, a 'final' tagged union that
@@ -60,51 +64,57 @@
                  [:in "hello?"]     ;; 🗴 after final tag
                  nil])
 
-;; ### multiple inputs
+;; ### Multiple Inputs
 ;; In the above example, the output was connected to a single input. To
 ;; connect an output to multiple inputs, a standard Clojure Set is used as in
 ;; this example:
 
 (let [in-1 (input :in-1)
       in-2 (input :in-2)
+
       out (output :out #{in-1 in-2})] ;; Use #{} to connect multiple inputs
   (net 'net-3 out))
 
-;; ### multiple outputs
+;; ### Multiple Outputs
 ;; Of course it is also possible to have multiple outputs connected to a single
 ;; input:
 
 (let [in (input :in)
+
       out-1 (output :out-1 in)
       out-2 (output :out-2 in)]
   (net 'net-4 #{out-1 out-2})) ;; now net uses #{} to handle multiple outputs
 
+;; ### Multiple Inputs & Outputs
 ;; Just for completeness, a transducer net with two inputs and two outputs:
 
 (let [a (input :a)
       b (input :b)
+
       c (output :c a)
       d (output :d #{a b})]
    (net 'net-5 #{c d}))
 
-;; ## `node` function
+;; ## `node` Function
 ;; The body of transducer nets is defined by calls to the `node` function. Each
 ;; call specifies the transducer for node in the net. Each node is considered
 ;; to be both an input and output in terms of the two previously mentioned
 ;; connectivity properties. In other words, each node is connected to at least
 ;; one input and at least one output.
 
-;; ### single node example
+;; ### Single Node Example
 ;; Here is a simple transducer net with a single node:
 (def net-6
   (let [in (input :in)
+
         n1 (node (map inc) in)
+
         out (output :out n1)]
     (net 'net-6 out)))
 
 (sequence net-6 [[:in 1] [:in 2] [:in 3]])
 
-;; ### multi node example
+;; ### Multi-Node Example
 ;; Here is a more complex transducer with multiple nodes and multiple inputs:
 (def net-7
   (let [untrusted (input :untrusted)
@@ -128,7 +138,7 @@
                  [:untrusted 239]
                  [:trusted -8]])
 
-;; ## `join` function
+;; ## `join` Function
 ;; So far all connections have been asynchronous. Values flowing into an output
 ;; from one connection is independent from values flowing in from other
 ;; connections.  `join` synchronizes values flowing across multiple
@@ -139,7 +149,9 @@
 (def net-8
   (let [in-1 (input :in-1)
         in-2 (input :in-2)
+
         a (join [in-1 in-2])
+
         o (output :out a)]
     (net 'net-8 o)))
 
@@ -149,7 +161,7 @@
                  [:in-1 'c]
                  [:in-2 2]])
 
-;; ### `passive` joins
+;; ### `passive` Joins
 ;; In the previous example, a value arriving on either connection caused `join`
 ;; to produce a new vector. When calling `join`, some of the inputs may be
 ;; wrapped using `passive`. Values flowing through passive connections will not
@@ -159,7 +171,9 @@
 (def net-9
   (let [in-1 (input :in-1)
         in-2 (input :in-2)
+
         a (join [(passive in-1) in-2])
+
         o (output :out a)]
     (net 'net-9 o)))
 
@@ -169,7 +183,7 @@
                  [:in-1 'c]
                  [:in-2 2]])
 
-;; ## `embed` function
+;; ## `embed` Function
 ;; The last function provided in the core API provides a way to define new
 ;; transducer nets using previously defined nets. `embed` takes a map
 ;; associating inputs to the input tags found in the embedded net and it
@@ -182,11 +196,14 @@
         in-b (input :in-b)
 
         {a :region1
-         b :region2}
-        (embed net-7
-               {:trusted in-a
-                :untrusted in-b})
-        out-a (output :out-a a)
-        out-b (output :out-b b)]
+         b :region2} (embed net-7
+                            {:trusted in-a
+                             :untrusted in-b})
 
-    (net 'net-10 #{out-a out-b})))
+        c (node (map str) b)
+
+        out-a (output :out-a a)
+        out-b (output :out-b b)
+        out-c (output :debug c)]
+
+    (net 'net-10 #{out-a out-b out-c})))

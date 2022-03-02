@@ -3,20 +3,47 @@
 ;; transducer by showing the more primitive transducers it uses.
 
 ;; This notebook takes a bottom up approach to describing these transducers
-;; starting with the most primitive and simple transducers and ending with the `net` transducer.
+;; starting with the most primitive and simple transducers and ending with the
+;; `net` transducer.
 
-(do
-  (require '[net.n01se.hassle.transducers
-             :refer [final tag detag multiplex demultiplex]])
-  (require '[net.n01se.hassle.core
-             :refer [net input node output]]))
+^{:nextjournal.clerk/visibility #{:hide}
+  :nextjournal.clerk/viewer :hide-result}
+(require '[net.n01se.hassle.transducers
+           :refer [final tag detag multiplex demultiplex]]
+         '[net.n01se.hassle.core
+           :refer [net input node output]])
 
 ;; ## Transducer Composition Tree
 ;; This diagram shows the 'composition tree' of transducers used to define `net` (blue are
-;; transducers added):
-(render-xf-compose-tree)
+;; transducers added in hassle):
+^{:nextjournal.clerk/visibility #{:hide}}
+(letfn [(vertex! [label & opts] (apply arr/insert-vertex! label opts))
+        (edge! [from to & opts] (apply arr/insert-edge! from to :stroke-width 1 opts))]
+  (-> (arr/create-graph)
+      (arr/with-graph
+        (let [v-map (vertex! "map")
+              v-take-while (vertex! "take-while")
+              v-filter (vertex! "filter")
+              v-final (vertex! "final" :fill-color "lightblue")
+              v-tag (vertex! "tag" :fill-color "lightblue")
+              v-detag (vertex! "detag" :fill-color "lightblue")
+              v-multiplex (vertex! "multiplex" :fill-color "lightblue")
+              v-demultiplex (vertex! "demultiplex" :fill-color "lightblue")
+              v-net (vertex! "net" :fill-color "lightblue")]
+          (edge! v-filter v-detag)
+          (edge! v-take-while v-detag)
+          (edge! v-map v-detag)
+          (edge! v-final v-tag)
+          (edge! v-map v-tag)
+          (edge! v-tag v-net)
+          (edge! v-detag v-net)
+          (edge! v-multiplex v-net)
+          (edge! v-demultiplex v-net)))
 
-;; ## built-in transducers
+    arr/as-svg
+    clerk/html))
+
+;; ## Built-in Transducers
 ;; Several of the most primitve transducers in the tree come standard with
 ;; Clojure. These are briefly described here. Also, this is a chance for those
 ;; new to transducers to at least see how they are used.
@@ -29,6 +56,10 @@
 (sequence (take-while number?)
           [1 3.14 5 6 "foo" -2 0])
 
+;; `filter` transducers only allows specific values to pass.
+(sequence (filter odd?)
+          (range 9))
+
 ;; ## `final` transducer
 ;; The `final` transducer just appends a final value to the sequence of values.
 ;; It is really the transducer equivalent to `conj`. Also, closely related to
@@ -40,12 +71,13 @@
 (sequence (final 4)
           [1 2 3])
 
-;; ## `tag` transducer
+;; ## `tag` Transducer
 ;; `tag` is built using `map` and `final` transducers and converts a sequence
 ;; of values into a sequence of 'tagged' values (also known as tagged unions or
 ;; variants).
 
 ;; The definition of tag is (named as tag' to avoid the original):
+^{:nextjournal.clerk/viewer :hide-result}
 (defn tag' [k]
   (comp (map (partial vector k))
         (final [k])))
@@ -58,12 +90,13 @@
 (interleave (sequence (tag' :a) (range 2))
             (sequence (tag' :b) (range 9 7 -1)))
 
-;; ## `detag` transducer
+;; ## `detag` Transducer
 ;; `detag` acts as the complement of `tag` by extracting the original sequence
 ;; of values from the tagged sequence. Non-tagged non-matching tagged values
 ;; are ignored. Also, the detagged sequence stops when a final tag is found.
 
 ;; The definition of detag is (renamed as detag' to avoid the original):
+^{:nextjournal.clerk/viewer :hide-result}
 (defn detag' [k]
   (comp (filter #(and (sequential? %)
                       (not (empty? %))
@@ -78,7 +111,7 @@
                 (detag' :a))
           (range 3))
 
-;; ## `multiplex` transducer
+;; ## `multiplex` Transducer
 ;; `multiplex` is a higher order transducer that applies each value to multiple
 ;; transducers. The results of all transducers are returned in a sequence.
 ;; `multiplex` is reduced when all transducers are reduced. This particular
@@ -88,7 +121,7 @@
 (sequence (multiplex [(tag' :a) (tag' :b)]) (range 2))
 (sequence (multiplex [(detag' :a) (detag' :b)]) [[:b "j"] [:b "w"] [:a 1]])
 
-;; ## `demultiplex` transducer
+;; ## `demultiplex` Transducer
 ;; `demultiplex` acts the complement of multiplex in that multiple transducers
 ;; can share a single `demultiplex` transducer so that its state is shared.
 
@@ -102,7 +135,7 @@
       d (multiplex [b c])]  ;; safe to run a and b together
   (sequence d [1 2 3 4]))
 
-;; ## `net` transducer
+;; ## `net` Transducer
 ;; Finally, we come to the `net` transducer that combines all of the above
 ;; transducers. Roughly speaking they are combined as follows: `detag` ->
 ;; `multiplex` -> ... -> `demultiplex` -> `tag`.
@@ -135,6 +168,8 @@
 ;; via zero arg invocation of the transducer net:
 (multi-io-example)
 
-;; This means visualization tools, like the one used in this notebook, may be used.
+;; This means visualization tools, like the one used in this notebook, may be
+;; used.
 
-;; To learn more on representing transducer nets for the `net` transducer, refer to the ajoining notebook
+;; To learn more on representing transducer nets for the `net` transducer,
+;; refer to the ajoining notebook
