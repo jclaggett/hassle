@@ -1,5 +1,5 @@
 ;; # Transducer Nets
-;; *Lonocloud Online Meetup
+;; *Lonocloud Online Meetup*
 
 ;; *Wednesday, March 2, 2022*
 
