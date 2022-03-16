@@ -88,5 +88,12 @@
 (def input net/input)
 (def output net/output)
 (def node* net/node*)
-(def embed net/embed)
-(def postwalk net/postwalk)
+
+(defn embed [xfn input-map]
+  (net/embed (xfn) input-map))
+
+(defn postwalk [xfn roots update-fn]
+  (net/postwalk (xfn) roots update-fn))
+
+(defn pr-xfn [xfn]
+  (net/compact-net-map (xfn)))
