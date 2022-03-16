@@ -10,7 +10,7 @@
   :nextjournal.clerk/viewer :hide-result}
 (require '[net.n01se.hassle.transducers
            :refer [final tag detag multiplex demultiplex]]
-         '[net.n01se.hassle.core
+         '[net.n01se.hassle.xfnet
            :refer [net input node output]])
 
 ;; ## Transducer Composition Tree

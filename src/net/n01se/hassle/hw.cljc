@@ -3,7 +3,7 @@
 
             [net.n01se.hassle.transducers
              :refer [tag]]
-            [net.n01se.hassle.core
+            [net.n01se.hassle.xfnet
              :refer [net input node output embed join passive]]))
 
 (defn run-ex [xf]

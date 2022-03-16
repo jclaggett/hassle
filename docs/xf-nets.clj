@@ -5,7 +5,7 @@
 
 ^{:nextjournal.clerk/visibility #{:hide}
   :nextjournal.clerk/viewer :hide-result}
-(require '[net.n01se.hassle.core
+(require '[net.n01se.hassle.xfnet
            :refer [net input node output join passive embed]])
 
 ;; ## `net` Function
